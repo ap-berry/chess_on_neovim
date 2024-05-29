@@ -1,5 +1,7 @@
 Drawing
 
+
+maybe I can use buf_set_text to only update single quare hls and text 
 show board
 show board numbers
 show pieces
