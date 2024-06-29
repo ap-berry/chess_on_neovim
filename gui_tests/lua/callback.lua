@@ -1,3 +1,3 @@
 function whichbutton()
-  vim.g.events = vim.g.events .. " pressed:" .. vim.api.nvim_win_get_cursor(0)[1]
+  vim.g.menu_events = vim.g.menu_events .. vim.api.nvim_win_get_cursor(0)[1] .. " "
 end

@@ -7,7 +7,8 @@ nvim = attach("tcp", '127.0.0.1', 6789)
 b = chess.Board()
 
 sw = StatsWin(nvim)
-sw.draw()
+sw.redraw()
+
 
 
 
