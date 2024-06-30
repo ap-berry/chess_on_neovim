@@ -144,9 +144,14 @@ def config_gen(
                 "height": 8,
                 "focusable": True,
                 "zindex": z_index,
-                "row": 0,
-                "col": 0,
                 "border": "single",
+            }
+        )
+
+        _config.update(
+            {
+                "row": (workspace_height(nvim) - _config["height"]) // 2,
+                "col": (workspace_width(nvim) - _config["width"] + 32) // 2,
             }
         )
     elif config == "stats":
@@ -157,12 +162,17 @@ def config_gen(
                 "width": 30,
                 "height": 11,
                 "focusable": True,
-                "row": 0,
-                "col": 28,
                 "external": False,
                 "zindex": z_index,
                 "style": "minimal",
                 "border": "single",
+            }
+        )
+
+        _config.update(
+            {
+                "row": (workspace_height(nvim) - _config["height"]) // 2,
+                "col": (workspace_width(nvim) - _config["width"] - 32) // 2,
             }
         )
     elif config == "info":

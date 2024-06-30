@@ -16,11 +16,13 @@ pages = {
     "home": [
         " Main Menu~",
         "",
+        " -> Join Ongoing Game",
         " -> Seek Opponent",
         " -> Challenge open",
         " -> Challenge ai",
         " <- Exit chess_on_neovim",
     ],
+    "ongoing": [" Ongoing Games~", "", "Loading...    ", " <- Back"],
     "seek": [
         " Seek Random Opponent~ ",
         "",
@@ -47,11 +49,13 @@ page_actions = {
     "home": [
         None,
         None,
-        "switchpage_seek",
+        "switchpage_to_ongoing",
+        "switchpage_to_seek",
         "switchpage_to_challenge_open",
         "switchpage_to_challenge_ai",
         "kill_main_process",
     ],
+    "ongoing": [None, None, None, "switchpage_to_home"],
     "seek": [None, None, None, None, None, "create_seek", "switchpage_to_home"],
     "challenge_open": [
         None,
@@ -120,15 +124,30 @@ class MenuWin:
             self.do_action_challenge_ai(page_actions["challenge_ai"][event])
         elif self.page == "seek":
             self.do_action_seek(page_actions["seek"][event])
+        elif self.page == "ongoing":
+            self.do_action_ongoing(page_actions["ongoing"][event])
+        else:
+            print("CASE NOT IMPLEMENTED")
 
     def _switch_page(
-        self, next_page: Literal["home", "challenge_ai", "challenge_open", "seek"]
+        self,
+        next_page: Literal["home", "challenge_ai", "challenge_open", "seek", "ongoing"],
     ):
         self.page = next_page
         self.buffer[:] = pages[next_page]
 
+    def do_action_ongoing(self, action: str):
+        if action == "switchpage_to_home":
+            self._switch_page("home")
+            page_actions["ongoing"] = [None, None, None, "switchpage_to_home"]
+        elif action in page_actions["ongoing"]:
+            print("joining game " + action)
+
     def do_action_home(self, action: str):
-        if action == "switchpage_seek":
+        if action == "switchpage_to_ongoing":
+            self._switch_page("ongoing")
+            self._fill_ongoing_page()
+        elif action == "switchpage_to_seek":
             self._switch_page("seek")
         elif action == "switchpage_to_challenge_open":
             self._switch_page("challenge_open")
@@ -138,6 +157,22 @@ class MenuWin:
         elif action == "kill_main_process":
             self.kill_window()
             exit()
+
+    def _fill_ongoing_page(self):
+        ongoing_games = self.client.games.get_ongoing()
+        self.ongoing_games = []
+
+        screen = self.buffer[:]
+        for game in ongoing_games:
+            if screen[2].startswith("Loading"):
+                screen[2] = " vs " + game["opponent"]["username"]
+                page_actions["ongoing"][2] = game["gameId"]
+
+            else:
+                screen.insert(-1, (" vs " + game["opponent"]["username"]))
+                page_actions["ongoing"].insert(-1, game["gameId"])
+
+            self.buffer[:] = screen
 
     def do_action_seek(self, action: str):
         if action == "create_seek":
@@ -228,22 +263,3 @@ def test():
 
 
 test()
-
-
-# create_open(clock_limit=None, clock_increment=None, variant=None, position=None)[source]
-# Create a challenge that any two players can join.
-
-# Parameters
-# clock_limit (int) – clock initial time (in seconds)
-
-# clock_increment (int) – clock increment (in seconds)
-
-# variant (Variant) – game variant to use
-
-# position (str) – custom intial position in FEN (variant must be standard and the game cannot be rated)
-
-# Returns
-# challenge data
-
-# Return type
-# dict
