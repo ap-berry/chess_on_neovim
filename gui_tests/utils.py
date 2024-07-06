@@ -1,6 +1,95 @@
 from pynvim import Nvim, attach
 from pynvim.api import Buffer, Window
-from typing import Literal, Tuple, Optional, Union
+from typing import Literal, Tuple, Optional, Union, TypedDict, NamedTuple
+
+
+class ExtmarksOptions(TypedDict, total=False):
+    id: int
+    end_row: int
+    end_col: int
+    hl_group: str
+    hl_eol: bool
+    virt_text: list[Tuple[str, str]]
+    virt_text_pos: Literal["eol", "overlay", "right_align", "inline"]
+    virt_text_win_col: int
+    virt_text_hide: bool
+    virt_text_repeat_linebreak: bool
+    hl_mode: Literal["replace", "combine", "blend"]
+    virt_lines: list[list[Tuple[str, str]]]
+    virt_lines_above: bool
+    virt_lines_leftcol: bool
+    right_gravity: bool
+    end_right_gravity: bool
+    undo_restore: bool
+    invalidate: bool
+    priority: int
+    strict: bool
+    sign_text: str
+    sign_hl_group: str
+    number_hl_group: str
+    line_hl_group: str
+    cursorline_hl_group: str
+    conceal: bool
+    spell: bool
+    ui_watched: bool
+    url: str
+
+
+def buf_del_extmark(nvim: Nvim, buffer: Buffer, ns_id: int, id: int):
+    "returns true if extmark was found, false otherwise"
+    return nvim.api.buf_del_extmark(buffer, ns_id, id)
+
+
+def win_del_force(nvim: Nvim, win: Window):
+    nvim.api.win_close(win, True)
+
+
+def win_is_valid(nvim: Nvim, win: Window):
+    return nvim.api.win_is_valid(win)
+
+
+def buf_set_extmark(
+    nvim: Nvim, buffer: Buffer, ns_id: int, line: int, col: int, opts: ExtmarksOptions
+):
+    """
+    line, 0-based inclusive
+    col, 0-based inclusive
+    end_row, 0-based inclusive,
+    end_col, 0-baed exclusive
+
+    returns the extmark id
+    """
+    return nvim.api.buf_set_extmark(buffer, ns_id, line, col, opts)
+
+
+class Highlight(TypedDict):
+    hl_group: str
+    line: int
+    col_start: int
+    col_end: int
+
+
+def buf_add_hl(nvim: Nvim, buffer: Buffer, ns_id: int, hl: list):
+    nvim.api.buf_add_highlight(buffer, ns_id, hl[0], hl[1], hl[2], hl[3])
+
+
+def buf_set_hls(nvim: Nvim, buffer: Buffer, ns_id: int, hls: list):
+    for hl in hls:
+        buf_add_hl(nvim, buffer, ns_id, hl)
+
+
+def buf_clear_namespace(
+    nvim: Nvim, buffer: Buffer, ns_id: int, start_line: int = 0, end_line: int = -1
+):
+    nvim.api.buf_clear_namespace(buffer, ns_id, start_line, end_line)
+
+
+def buf_del_all_extmarks(
+    nvim: Nvim, buffer: Optional[Buffer] = 0, ns_id: Optional[int] = -1
+):
+    extmarks = nvim.api.buf_get_extmarks(buffer, ns_id, [0, 0], [-1, -1], {})
+    for extmark in extmarks:
+        nvim.api.buf_del_extmark(buffer, ns_id, extmark[0])
 
 
 def workspace_width(nvim: Nvim) -> int:
@@ -53,7 +142,7 @@ def buf_set_text(
     start_col: int,
     end_row: int,
     end_col: int,
-    text,
+    text: list[str],
 ):
     """{start_row} First line index
     {start_col} Starting column (byte offset) on first line
@@ -144,7 +233,7 @@ def config_gen(
                 "height": 8,
                 "focusable": True,
                 "zindex": z_index,
-                "border": "single",
+                "border": "rounded",
             }
         )
 
@@ -209,6 +298,26 @@ def config_gen(
         _config.update(
             {
                 "row": (workspace_height(nvim) - _config["height"]) // 2,
+                "col": (workspace_width(nvim) - _config["width"]) // 2,
+            }
+        )
+    elif config == "input":
+        _config.update(
+            {
+                "relative": "win",
+                "win": win.handle,
+                "width": 20,
+                "height": 1,
+                "focusable": True,
+                "external": False,
+                "zindex": z_index,
+                "style": "minimal",
+                "border": "none",
+            }
+        )
+        _config.update(
+            {
+                "row": (workspace_height(nvim) - _config["height"] - 20) // 2,
                 "col": (workspace_width(nvim) - _config["width"]) // 2,
             }
         )
@@ -283,7 +392,7 @@ def force_redraw(nvim: Nvim):
     nvim.command("redraw!")
 
 
-def get_global_var(nvim: Nvim, key: str) -> Optional[str]:
+def get_global_var(nvim: Nvim, key: str) -> Optional[any]:
     """do NOT include the g: at the begining of the variable key"""
     try:
         return nvim.api.get_var(key)
@@ -291,7 +400,7 @@ def get_global_var(nvim: Nvim, key: str) -> Optional[str]:
         return None
 
 
-def set_global_var(nvim: Nvim, key: str, value: str):
+def set_global_var(nvim: Nvim, key: str, value: any):
     """do NOT include the g: at the begining of the variable key"""
     nvim.api.set_var(key, value)
 
@@ -306,6 +415,11 @@ def add_events(nvim: Nvim, events: Union[list[str], str]):
 
 def buf_del_force(nvim: Nvim, buffer: Buffer):
     nvim.api.buf_delete(buffer.handle, {"force": True})
+
+
+def namespace(nvim: Nvim, ns_name: str):
+    """creates or finds a namepsace"""
+    return nvim.api.create_namespace(ns_name)
 
 
 def test():

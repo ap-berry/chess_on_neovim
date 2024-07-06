@@ -35,14 +35,14 @@ pages = {
     "challenge_ai": [
         " Challenge Ai~ ",
         "",
-        " Level           : 8",
+        " Level           : 1",
         " Time control(s) : 600",
         " Increment(s)    : 0",
         " Color           : Random",  # enter function
         " Start Game ->",
         " <- Back",
     ],
-    "challenge_open": [" not done yet"],
+    "challenge_open": [" not done yet", " <- Back"],
 }
 
 page_actions = {
@@ -59,7 +59,7 @@ page_actions = {
     "seek": [None, None, None, None, None, "create_seek", "switchpage_to_home"],
     "challenge_open": [
         None,
-        None,
+        "switchpage_to_home",
     ],
     "challenge_ai": [
         None,
@@ -75,16 +75,17 @@ page_actions = {
 # todo : figure out a better way to implement the logic for button actions in different pages, maybe split the logic part between lua and python????
 
 """
-the menu has buffer specific keymaps that update a global variable in neovim with space separated events that indicate on which line the enter key was pressed
-it does not read, it only write to it.
-call the MenuWin.updateMenu method with a single event to update the gui accordingly.
-the first two lines must be actionless and only contain info about the current page.
+the menu has buffer specific keymaps that update a global variable in neovim with the row position of the cursor when Enter/<CR>/Return is pressed
+call the MenuWin.updateMenu method with a single cursor row position to update the gui according to the page_action defined for that pressing Return on that line.
+the first two lines should be actionless and only contain info about the current page.
 
 
 the menu has pages which are essentially a collection of buffer text and window configs (such as create challenge page)
 the menu window should not be hidden/deleted unless a game is started
-you can extract the events from the events variable by reading it from neovim using the get_global_var from the utils module, the variable name is g:menu_events 
-the variable is automatically set to '' when a MenuWin instance is created.
+you can extract the events from the events variable by reading it from neovim using the get_global_var from the utils module, the variable name is g:app_events 
+
+`utils.get_global_var(neovim_session, "app_events")`
+the variable is automatically set to and empty list when a MenuWin instance is created.
 
 """
 
@@ -109,13 +110,33 @@ class MenuWin:
         ) or utils.create_window(
             session, self.buffer, True, config=self.window_config, title="menu"
         )
+
+        self.namespace = self.session.api.create_namespace("MenuWinNS")
         self.page = "home"
         self.buffer[:] = pages[self.page]
         self.options = [0, 0, self.kill_window]
 
-        self._set_current()
-        utils.set_cursor(session, self.window, (2, 0))
+        # Workflow
+        self._clear_events()
+        self._set_highlights()
+        self._set_locals()
+        utils.set_cursor(session, self.window, (3, 0))
         self._set_buffer_local_keymap()
+
+    def _set_locals(self):
+        self.session.command("setlocal cursorline")
+
+    def _set_highlights(self):
+        self.session.command(
+            "highlight CursorLine ctermbg=White ctermfg=Black cterm=None"
+        )
+        self.session.command("highlight NormalFloat ctermbg=Red")
+        self.session.api.win_set_hl_ns(self.window, self.namespace)
+        self.session.api.set_hl(
+            self.namespace,
+            "NormalFloat",
+            {"ctermbg": "DarkBlue", "ctermfg": "White"},
+        )
 
     def process_menu_event(self, event: int):
         if self.page == "home":
@@ -126,6 +147,8 @@ class MenuWin:
             self.do_action_seek(page_actions["seek"][event])
         elif self.page == "ongoing":
             self.do_action_ongoing(page_actions["ongoing"][event])
+        elif self.page == "challenge_open":
+            self.do_action_challenge_open(page_actions["challenge_open"][event])
         else:
             print("CASE NOT IMPLEMENTED")
 
@@ -140,8 +163,15 @@ class MenuWin:
         if action == "switchpage_to_home":
             self._switch_page("home")
             page_actions["ongoing"] = [None, None, None, "switchpage_to_home"]
-        elif action in page_actions["ongoing"]:
-            print("joining game " + action)
+        elif action is not None:
+            """action can be gameId"""
+            print("joining game ")
+
+            app_events = utils.get_global_var(self.session, "app_events")
+            app_events.append(
+                {"page": "Home", "event": "startgame", "opts": {"gameId": action}}
+            )
+            utils.set_global_var(self.session, "app_events", app_events)
 
     def do_action_home(self, action: str):
         if action == "switchpage_to_ongoing":
@@ -155,14 +185,22 @@ class MenuWin:
             self._switch_page("challenge_ai")
 
         elif action == "kill_main_process":
-            self.kill_window()
-            exit()
+            utils.set_global_var(
+                self.session,
+                "app_events",
+                [{"page": "Global", "event": "kill_main_process", "opts": {}}],
+            )
 
     def _fill_ongoing_page(self):
         ongoing_games = self.client.games.get_ongoing()
         self.ongoing_games = []
 
         screen = self.buffer[:]
+        if len(ongoing_games) == 0:
+            screen[2] = " No Ongoing Games Found"
+            self.buffer[:] = screen
+            return
+
         for game in ongoing_games:
             if screen[2].startswith("Loading"):
                 screen[2] = " vs " + game["opponent"]["username"]
@@ -182,7 +220,12 @@ class MenuWin:
             rated = True if self.buffer[4].lower().find("true") != -1 else False
 
             newgame = self.client.board.seek(time, inc, rated)
+
         elif action == "switchpage_to_home":
+            self._switch_page("home")
+
+    def do_action_challenge_open(self, action: str):
+        if action == "switchpage_to_home":
             self._switch_page("home")
 
     def do_action_challenge_ai(self, action: str):
@@ -205,19 +248,28 @@ class MenuWin:
                 clock_limit=clock_limit_seconds,
                 color=color,
             )
-
-            print(response)
+            app_events = utils.get_global_var(self.session, "app_events")
+            app_events.append(
+                {
+                    "page": "Home",
+                    "event": "startgame",
+                    "opts": {"gameId": response["id"]},
+                }
+            )
+            utils.set_global_var(self.session, "app_events", app_events)
 
         elif action == "switchpage_to_home":
             self._switch_page("home")
 
+    def _clear_events(self):
+        utils.set_global_var(self.session, "app_events", [])
+
     def _set_buffer_local_keymap(self):
-        self.session.command("let g:menu_events = ''")
         utils.noremap_lua_callback(
             self.session,
-            "/mnt/Study And Code/project/chess_on_neovim/gui_tests/lua/callback.lua",
+            "./gui_tests/lua/MenuWinCallback.lua",
             "<CR>",
-            "<cmd>:lua whichbutton()<CR>",
+            "<cmd>:lua MenuWinCallback()<CR>",
             current_buffer_specific=True,
             insertmodeaswell=True,
         )
@@ -235,31 +287,3 @@ class MenuWin:
         self.buffer[:] = []
         self.session.api.win_close(self.window, True)
         self.session.api.buf_delete(self.buffer, {"force": True})
-
-
-def test():
-    API_TOKEN = os.getenv("API_TOKEN")
-    session = berserk.TokenSession(API_TOKEN)
-    client = berserk.Client(session=session)
-
-    nvim = attach("tcp", "127.0.0.1", 6789)
-
-    m = MenuWin(nvim, client)
-
-    while True:
-        events = utils.get_global_var(nvim, "menu_events")
-        if not events:
-            continue
-
-        for e in events.split(" "):
-            if e != "":
-                m.process_menu_event(
-                    int(e) - 1
-                )  # since lua has 1 based index not 0 based !!!!!!!!!!!!!!!!!!!!!!!!!
-
-        utils.set_global_var(nvim, "menu_events", "")
-
-        sleep(0.1)
-
-
-test()

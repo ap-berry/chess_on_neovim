@@ -7,3 +7,4 @@ function ErrorWinCallBack()
         vim.api.nvim_win_close(0, true)
     end
 end
+

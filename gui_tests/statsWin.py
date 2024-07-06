@@ -62,6 +62,11 @@ class StatsWin:
             "StatsWindow",
         )
 
+        self.augroup = self.session.api.create_augroup(
+            "StatsWinAuGroup", {"clear": True}
+        )
+        self.window_namespace = namespace(self.session, "StatusWinNS")
+
         if stats:
             self.set_stats(stats=stats)
             self.gui_initialized = True
@@ -70,15 +75,23 @@ class StatsWin:
             self.displayable_stats = empty_stats
             self.gui_initialized = False
 
+        self._set_window_highlights()
         self.redraw()
 
+    def _set_window_highlights(self):
+        self.session.api.win_set_hl_ns(self.window, self.window_namespace)
+        self.session.api.set_hl(
+            self.window_namespace,
+            "NormalFloat",
+            {"ctermbg": "Black", "ctermfg": "White"},
+        )
+
     def destroy(self):
-        self.buffer[:] = []
         self.session.api.win_close(self.window, True)
         self.session.api.buf_delete(self.buffer, {"force": True})
 
     def redraw(self):
-        """Note: DOES NOT APPLY CHANGES TO GUI UNLESS self.set_gui() IS CALLED"""
+        """Note: DOES NOT APPLY CHANGES TO GUI UNLESS self.displayable_stats IS UPDATED"""
         buf_set_lines(nvim=self.session, buf=self.buffer, text=self.displayable_stats)
         force_redraw(nvim=self.session)
 
@@ -114,48 +127,36 @@ class StatsWin:
             self.bname = black["name"]
             self.bflair = "@"
             self.brating = str(black["rating"])
-            self.btime = str(state["btime"])
-            self.binc = str(state["binc"])
             self.btitle = black["title"] or "--"
 
         elif "aiLevel" in black:
             self.bname = "StockFish" + str(black["aiLevel"])
             self.bflair = "@"
             self.brating = ""
-            self.btime = str(state["btime"])
-            self.binc = str(state["binc"])
             self.btitle = ""
 
         else:
             self.bname = "Anonymous"
             self.bflair = " "
             self.brating = ""
-            self.btime = str(state["btime"])
-            self.binc = str(state["binc"])
             self.btitle = ""
 
         if "id" in white:
             self.wname = white["name"]
             self.wflair = "@"
             self.wrating = str(white["rating"])
-            self.wtime = str(state["wtime"])
-            self.winc = str(state["winc"])
             self.wtitle = white["title"] or "--"
 
         elif "aiLevel" in white:
             self.wname = "StockFish" + str(white["aiLevel"])
             self.wflair = "@"
             self.wrating = ""
-            self.wtime = str(state["wtime"])
-            self.winc = str(state["winc"])
             self.wtitle = ""
 
         else:
             self.wname = "Anonymous"
             self.wflair = " "
             self.wrating = ""
-            self.wtime = str(state["wtime"])
-            self.winc = str(state["winc"])
             self.wtitle = ""
 
         self.speed = gameFullEvent["speed"]
@@ -190,13 +191,27 @@ class StatsWin:
     def set_ingame_displayable_stats(self):
         self.displayable_stats = self._create_displayable_stats_ingame()
 
+    def set_autocmd(self, handle: int):
+        self.session.api.create_autocmd(
+            "BufEnter",
+            {
+                "group": self.augroup,
+                "buffer": self.buffer.number,
+                "command": f"call nvim_set_current_win({handle})",
+            },
+        )
+
     def set_times(
         self,
         wtime: Optional[Union[datetime, int]] = None,
         btime: Optional[Union[datetime, int]] = None,
+        winc: Optional[int] = None,
+        binc: Optional[int] = None,
     ):
         """at least one time needs to be given.
-        time must be datetime obj or miliseconds"""
+        time must be datetime obj or miliseconds
+        Increments must be in miliseconds
+        """
         assert wtime or btime, "at least one time needs to be given"
 
         if wtime:
@@ -207,6 +222,12 @@ class StatsWin:
             self.btime = self._timems_to_timestring(
                 to_millis(btime) if type(btime) is not int else btime
             )
+
+        if winc != None:
+            self.winc = str(winc // 1000)
+
+        if binc != None:
+            self.binc = str(binc // 1000)
 
     def _set_current(self):
         self.session.current.buffer = self.buffer
