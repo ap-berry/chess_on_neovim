@@ -42,5 +42,5 @@ do anything on gui (for now)
 
 Issues:
 
-Highlights make the board updates flicker when making moves
+Highlights make the board updates flicker when making moves [SOLVED]
 
