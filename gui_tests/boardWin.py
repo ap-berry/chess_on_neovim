@@ -113,6 +113,8 @@ class BoardWin:
             self.window_namespace,
             "WhiteSquare",
             {
+                "bg": "White",
+                "fg": "Black",
                 "ctermbg": "White",
                 "ctermfg": "Black",
                 "bold": True,
@@ -124,6 +126,8 @@ class BoardWin:
             self.window_namespace,
             "BlackSquare",
             {
+                "bg": "LightGreen",
+                "fg": "Black",
                 "ctermbg": "DarkBlue",
                 "ctermfg": "Black",
                 "bold": True,
@@ -134,27 +138,61 @@ class BoardWin:
         self.session.api.set_hl(
             self.window_namespace,
             "MovedTo",
-            {"ctermbg": "LightGreen", "ctermfg": "Black", "bold": True, "blend": 0},
+            {
+                "bg": "LightBlue",
+                "fg": "Black",
+                "ctermbg": "LightGreen",
+                "ctermfg": "Black",
+                "bold": True,
+                "blend": 0,
+            },
         )
         self.session.api.set_hl(
             self.window_namespace,
             "MovedFrom",
-            {"ctermbg": "Green", "ctermfg": "Black", "bold": True, "blend": 0},
+            {
+                "bg": "Blue",
+                "fg": "Black",
+                "ctermbg": "Green",
+                "ctermfg": "Black",
+                "bold": True,
+                "blend": 0,
+            },
         )
         self.session.api.set_hl(
             self.window_namespace,
             "Checker",
-            {"ctermbg": "LightRed", "ctermfg": "Black", "bold": True, "blend": 0},
+            {
+                "bg": "LightRed",
+                "fg": "Black",
+                "ctermbg": "LightRed",
+                "ctermfg": "Black",
+                "bold": True,
+                "blend": 0,
+            },
         )
         self.session.api.set_hl(
             self.window_namespace,
             "Checked",
-            {"ctermbg": "Red", "ctermfg": "Black", "bold": True, "blend": 0},
+            {
+                "bg": "LightRed",
+                "fg": "Black",
+                "ctermbg": "Red",
+                "ctermfg": "Black",
+                "bold": True,
+                "blend": 0,
+            },
         )
         self.session.api.set_hl(
             self.window_namespace,
             "Border",
-            {"ctermbg": "Black", "ctermfg": "White", "bold": True, "blend": 0},
+            {
+                "fg": "White",
+                "ctermbg": "Black",
+                "ctermfg": "White",
+                "bold": True,
+                "blend": 0,
+            },
         )
 
     def set_autocmd(self, handle: int):
@@ -205,14 +243,10 @@ class BoardWin:
         as lastMove"""
 
         _fen = self.board.board_fen().split("/")
+
         border_line = [[" " * 2, self.hl_group_board_border]]
-        if self.flip:
-            _fen = self._flip_board_fen(_fen)
-            for i in range(8):
-                border_line.append([f" {chr(97+7-i)} ", self.hl_group_board_border])
-        else:
-            for i in range(8):
-                border_line.append([f" {chr(97+i)} ", self.hl_group_board_border])
+        for i in range(8):
+            border_line.append([f" {chr(97+i)} ", self.hl_group_board_border])
         border_line.append([" " * 2, self.hl_group_board_border])
 
         if len(_fen) != 8:
@@ -232,7 +266,7 @@ class BoardWin:
         for i in range(8):
             virt_line = [
                 [
-                    (str(8 - i) if not self.flip else str(i + 1)) + " ",
+                    str(8 - i) + " ",
                     self.hl_group_board_border,
                 ]
             ]
@@ -256,11 +290,11 @@ class BoardWin:
             to_sq = lastMove.to_square
 
             # from square er kaj
-            from_sq_row = (7 - from_sq // 8) if not self.flip else (from_sq // 8)
-            from_sq_col = (from_sq % 8) + 1 if not self.flip else 7 - (from_sq % 8) + 1
+            from_sq_row = 7 - from_sq // 8
+            from_sq_col = (from_sq % 8) + 1
 
-            to_sq_row = (7 - to_sq // 8) if not self.flip else (to_sq // 8)
-            to_sq_col = (to_sq % 8) + 1 if not self.flip else 7 - (to_sq % 8) + 1
+            to_sq_row = 7 - to_sq // 8
+            to_sq_col = (to_sq % 8) + 1
 
             virt_lines[from_sq_row][from_sq_col][1] = self.hl_group_move_from
             virt_lines[to_sq_row][to_sq_col][1] = self.hl_group_move_to
@@ -270,14 +304,19 @@ class BoardWin:
             print(king_in_check_sq, "\n\n\n")
             assert king_in_check_sq, "King In Check Not Found"
 
-            if not self.flip:
-                checked_row = king_in_check_sq[0]
-                checked_col = king_in_check_sq[1] + 1
-            else:
-                checked_row = 7 - king_in_check_sq[0]
-                checked_col = 7 - king_in_check_sq[1] + 1
+            checked_row = king_in_check_sq[0]
+            checked_col = king_in_check_sq[1] + 1
 
             virt_lines[checked_row][checked_col][1] = self.hl_group_checked
+
+        if self.flip:
+            virt_lines = [virt_line[::-1] for virt_line in virt_lines[::-1]]
+            border_line.reverse()
+
+            for i in range(8):
+                _temp = virt_lines[i][0]
+                virt_lines[i][0] = virt_lines[i][-1]
+                virt_lines[i][-1] = _temp
 
         virt_lines.append(border_line)
 

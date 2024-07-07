@@ -26,7 +26,7 @@ class InputWin:
         )
         self.buffer[:] = [" "]
         self.sign_text = "> "
-        self.sign_text_hl_group = "SpellRare"
+        self.sign_text_hl_group = "Directory"
         self.window = utils.find_window_from_title(
             session, "InputWindow"
         ) or utils.create_window(
@@ -54,12 +54,14 @@ class InputWin:
         self.session.api.set_hl(
             self.window_namespace,
             "InputWinPlaceHolder",
-            {"ctermbg": "Grey", "ctermfg": "White", "blend": 0},
+            {"fg": "Grey", "ctermfg": "Grey", "blend": 0},
         )
         self.session.api.set_hl(
             self.window_namespace,
             "InputWinError",
             {
+                "bg": "Red",
+                "fg": "White",
                 "ctermbg": "Red",
                 "ctermfg": "White",
                 "blend": 0,
@@ -68,7 +70,7 @@ class InputWin:
 
     def set_extmarks(
         self,
-        text: str = "Type action and Enter            ",
+        text: str = " Type action and Enter",
         hl: str = "InputWinPlaceHolder",
     ):
         # self.session.command("highlight InputWinHelpText guifg=Blue guibg=Red")
@@ -77,9 +79,10 @@ class InputWin:
             end_row=0,
             sign_text=self.sign_text,
             sign_hl_group=self.sign_text_hl_group,
+            spell=False,
             id=1,
             virt_text=[[text, hl]],
-            virt_text_pos="overlay",
+            virt_text_pos="eol",
         )
         utils.buf_set_extmark(
             nvim=self.session,

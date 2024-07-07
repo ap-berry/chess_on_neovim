@@ -83,7 +83,7 @@ class StatsWin:
         self.session.api.set_hl(
             self.window_namespace,
             "NormalFloat",
-            {"ctermbg": "Black", "ctermfg": "White"},
+            {"fg": "White", "ctermbg": "Black", "ctermfg": "White"},
         )
 
     def destroy(self):

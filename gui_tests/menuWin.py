@@ -85,7 +85,7 @@ class MenuWin:
         self.window_config = utils.config_gen(
             session,
             config="menu",
-            border="single",
+            border="rounded",
             win=session.current.window,
             minimal=True,
         )
@@ -111,15 +111,25 @@ class MenuWin:
         self.session.command("setlocal cursorline")
 
     def _set_highlights(self):
-        self.session.command(
-            "highlight CursorLine ctermbg=White ctermfg=Black cterm=None"
-        )
-        self.session.command("highlight NormalFloat ctermbg=Red")
         self.session.api.win_set_hl_ns(self.window, self.namespace)
         self.session.api.set_hl(
             self.namespace,
             "NormalFloat",
-            {"ctermbg": "DarkBlue", "ctermfg": "White"},
+            {
+                "fg": "Grey",
+                "ctermbg": "Black",
+                "ctermfg": "White",
+            },
+        )
+        self.session.api.set_hl(
+            self.namespace,
+            "CursorLine",
+            {
+                "ctermbg": "White",
+                "ctermfg": "Black",
+                "bg": "White",
+                "fg": "Black",
+            },
         )
 
     def process_menu_event(self, event: int):

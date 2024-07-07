@@ -254,7 +254,7 @@ def config_gen(
                 "external": False,
                 "zindex": z_index,
                 "style": "minimal",
-                "border": "single",
+                "border": "rounded",
             }
         )
 
@@ -277,7 +277,7 @@ def config_gen(
                 "external": False,
                 "zindex": z_index,
                 "style": "minimal",
-                "border": "single",
+                "border": "rounded",
             }
         )
 
@@ -312,7 +312,7 @@ def config_gen(
                 "external": False,
                 "zindex": z_index,
                 "style": "minimal",
-                "border": "none",
+                "border": "rounded",
             }
         )
         _config.update(
