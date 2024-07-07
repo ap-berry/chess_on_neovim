@@ -28,14 +28,20 @@ To create a token head over to your `profile` and then to API Access Tokens and 
 ![alt text](<resources/steps 1 2.png>)
 ![alt text](<resources/step 3.png>)
 
+clone the repo:
+`git clone https://github.com/ap-berry/chess_on_neovim && cd chess_on_neovim`
+
+run this command with your API TOKEN
+`echo <API TOKEN> > gui_tests/.env`
+replace `<API TOKEN>` with your token
 
 
-install dependencies and clone the repo to your desired folder
+install dependencies:
 
 then run a neovim instance from the terminal with the options --listen 127.0.0.1:6789
 `nvim --listen 127.0.0.1:6789`
 
-after that run the `threadingmain.py` python file from the repo directory
+after that run the `gui_tests/threadingmain.py` python file from the repo directory
 
 that should be it
 
@@ -60,3 +66,4 @@ if an illegal move / incorrect move is made it shows a basic 'An error has occur
 
 Highlights make the board updates flicker when making moves [SOLVED]
 
+Installation is too complicated.
