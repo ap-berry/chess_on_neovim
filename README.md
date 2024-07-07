@@ -1,8 +1,9 @@
 # Chess on Neovim
 
 Finally, this a working demo-ish prototype
-Currently Only playable with lichess stockfish
+Currently Only playable with lichess stockfish on standard variation
 Multiplayer might come soon
+Other Variation support might come soon
 
 ## Runtime Dependencies include:
 1. berserk
@@ -30,17 +31,21 @@ that should be it
 
 the small windows on top of the board and stats when playing a game is the input window
 
-it acts as console which takes inputs on <CR> / Enter
-currently theses commands are defined
-'menu' -> return to main menu
-'kill_main' -> stop the python executables
-'resign' -> for when you accidentally start the match on stockfish level 8
-'abort' -> same reason
-it treats all other inputs as making a move.
-if an illegal move / incorrect move is made it prints to console. does not 
-do anything on gui (for now)
+it acts as console which takes inputs on Enter
+currently theses command are defined
+| command | Action | 
+| 'menu' | Return to main menu|
+| 'exit' | Kill the game windows and stop the python process |
+| 'resign' | For when you accidentally start the match on stockfish level 8 |
+| 'abort' | Same reason |
+| 'flip' | Flips the Board |
 
-Issues:
+
+it treats all other inputs as making a move.
+
+if an illegal move / incorrect move is made it shows a basic 'An error has occured' text in red inside the input window
+
+### Issues:
 
 Highlights make the board updates flicker when making moves [SOLVED]
 
