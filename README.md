@@ -1,9 +1,9 @@
 # Chess on Neovim
 
-Finally, this a working demo-ish prototype
-Currently Only playable with lichess stockfish on standard variation
-Multiplayer might come soon
-Other Variation support might come soon
+Finally, this a working demo-ish prototype.
+Currently only playable with lichess stockfish on standard variation.
+Multiplayer might come soon.
+Other Variation support might come soon.
 
 ## Runtime Dependencies include:
 1. berserk
@@ -21,11 +21,15 @@ for the pip related deps:
 ### To run
 First create an API TOKEN from lichess.org
 with the following permissions:
+
 ![alt text](resources/perms.png)
+
 ![alt text](<resources/perms 2.png>)
 
 To create a token head over to your `profile` and then to API Access Tokens and add a token 
+
 ![alt text](<resources/steps 1 2.png>)
+
 ![alt text](<resources/step 3.png>)
 
 clone the repo:
@@ -50,7 +54,9 @@ the small windows on top of the board and stats when playing a game is the input
 
 it acts as console which takes inputs on Enter
 currently theses command are defined
-| command | Action | 
+
+| command | Action |
+| -------- | ---------|
 | 'menu' | Return to main menu|
 | 'exit' | Kill the game windows and stop the python process |
 | 'resign' | For when you accidentally start the match on stockfish level 8 |
