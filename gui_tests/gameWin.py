@@ -5,28 +5,35 @@ from game_clock import GameClock
 
 from chess import Board, Move
 from pynvim import Nvim
+from berserk import Client
 
 from typing import Literal
 
-from time import sleep
-from berserk import Client
-import utils
-
 
 class GameWinManager:
-    def __init__(self, session: Nvim, gameId: str) -> None:
+    def __init__(
+        self,
+        session: Nvim,
+        gameId: str,
+        client: Client,
+        myside: Literal["black", "white"],
+    ) -> None:
         self.session = session
         self.gameId = gameId
+        self.client = client
 
         parent_window = self.session.current.window
 
         self.chessBoard = Board()
         self.boardWin = BoardWin(
-            session=self.session, board=self.chessBoard, relative_to_win=parent_window
+            session=self.session,
+            board=self.chessBoard,
+            relative_to_win=parent_window,
+            myside=myside,
         )
         self.statsWin = StatsWin(session=self.session, relative_to_win=parent_window)
         self.inputWin = InputWin(session=self.session, relative_to_win=parent_window)
-
+        self.myside = myside
         self.gameClock = None
 
         self.boardWin.set_autocmd(self.inputWin.window.handle)
@@ -34,19 +41,30 @@ class GameWinManager:
 
         self.session.api.set_current_win(self.inputWin.window)
 
-    def client_make_move(self, client: Client, move: str):
+    def flip_board(self):
+        self.boardWin.flip_board()
+
+    def client_make_move(self, move: str):
         # try
+        side = self.myside == "white"
+        if side != bool(self.boardWin.board.turn):
+            self.inputWin.set_extmarks(
+                "Not Your Turn          ", self.inputWin.hl_group_error
+            )
+            return
+        else:
+            self.inputWin.set_extmarks()
+
         try:
             move = self.boardWin.board.parse_san(move)
-            client.board.make_move(self.gameId, move.uci())
+            self.client.board.make_move(self.gameId, move.uci())
         except:
-            print("\n [LOUD INCORRECT BUZZER SOUND] \n")
+            self.inputWin.set_extmarks(
+                "An Error Occured         ", self.inputWin.hl_group_error
+            )
 
-    # except:
-    #     print("BAD MOVE FUCKER")
-
-    def client_resign(self, client: Client):
-        client.board.resign_game(self.gameId)
+    def client_resign(self):
+        self.client.board.resign_game(self.gameId)
 
     def decrement_game_clock(self):
         if not self.gameClock or not self.gameClock.started:
@@ -69,7 +87,7 @@ class GameWinManager:
         if event["type"] == "gameStart":
             gameFinished = False
             game = event["game"]
-            self.boardWin.redraw_from_fen(game["fen"])
+            self.boardWin.redraw_from_fen(game["fen"], game["lastMove"])
 
             if event["game"]["color"] == "black":
                 self.current_playing_side = (

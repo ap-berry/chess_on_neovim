@@ -229,8 +229,8 @@ def config_gen(
             {
                 "relative": "win",
                 "win": win.handle,
-                "width": 8 * 3,
-                "height": 8,
+                "width": 8 * 3 + 2 + 2,  # left pad + right pad
+                "height": 8 + 1 + 1,
                 "focusable": True,
                 "zindex": z_index,
                 "border": "rounded",
@@ -306,7 +306,7 @@ def config_gen(
             {
                 "relative": "win",
                 "win": win.handle,
-                "width": 20,
+                "width": 25,
                 "height": 1,
                 "focusable": True,
                 "external": False,

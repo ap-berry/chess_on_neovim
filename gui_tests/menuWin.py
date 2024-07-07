@@ -1,37 +1,23 @@
-from time import sleep
-from pynvim.api import Nvim, Buffer
+from random import choice
+
+from pynvim.api import Nvim
 import utils
 import re
-from pynvim import attach
-import berserk
+
 from berserk import Client
-import os
-from dotenv import load_dotenv
 from errorwin import ErrorWin
 from typing import Literal
-
-load_dotenv()
 
 pages = {
     "home": [
         " Main Menu~",
         "",
         " -> Join Ongoing Game",
-        " -> Seek Opponent",
         " -> Challenge open",
         " -> Challenge ai",
         " <- Exit chess_on_neovim",
     ],
     "ongoing": [" Ongoing Games~", "", "Loading...    ", " <- Back"],
-    "seek": [
-        " Seek Random Opponent~ ",
-        "",
-        " Time control(m) : 10",
-        " Increment(s)    : 0",
-        " Rated?          : true",
-        " Start Game ->",
-        " <- Back",
-    ],
     "challenge_ai": [
         " Challenge Ai~ ",
         "",
@@ -50,13 +36,11 @@ page_actions = {
         None,
         None,
         "switchpage_to_ongoing",
-        "switchpage_to_seek",
         "switchpage_to_challenge_open",
         "switchpage_to_challenge_ai",
-        "kill_main_process",
+        "exit",
     ],
     "ongoing": [None, None, None, "switchpage_to_home"],
-    "seek": [None, None, None, None, None, "create_seek", "switchpage_to_home"],
     "challenge_open": [
         None,
         "switchpage_to_home",
@@ -143,8 +127,6 @@ class MenuWin:
             self.do_action_home(page_actions["home"][event])
         elif self.page == "challenge_ai":
             self.do_action_challenge_ai(page_actions["challenge_ai"][event])
-        elif self.page == "seek":
-            self.do_action_seek(page_actions["seek"][event])
         elif self.page == "ongoing":
             self.do_action_ongoing(page_actions["ongoing"][event])
         elif self.page == "challenge_open":
@@ -154,7 +136,7 @@ class MenuWin:
 
     def _switch_page(
         self,
-        next_page: Literal["home", "challenge_ai", "challenge_open", "seek", "ongoing"],
+        next_page: Literal["home", "challenge_ai", "challenge_open", "ongoing"],
     ):
         self.page = next_page
         self.buffer[:] = pages[next_page]
@@ -164,12 +146,16 @@ class MenuWin:
             self._switch_page("home")
             page_actions["ongoing"] = [None, None, None, "switchpage_to_home"]
         elif action is not None:
-            """action can be gameId"""
+            """action is most likely [gameId, color]"""
             print("joining game ")
 
             app_events = utils.get_global_var(self.session, "app_events")
             app_events.append(
-                {"page": "Home", "event": "startgame", "opts": {"gameId": action}}
+                {
+                    "page": "Home",
+                    "event": "startgame",
+                    "opts": {"gameId": action[0], "color": action[1]},
+                }
             )
             utils.set_global_var(self.session, "app_events", app_events)
 
@@ -177,18 +163,16 @@ class MenuWin:
         if action == "switchpage_to_ongoing":
             self._switch_page("ongoing")
             self._fill_ongoing_page()
-        elif action == "switchpage_to_seek":
-            self._switch_page("seek")
         elif action == "switchpage_to_challenge_open":
             self._switch_page("challenge_open")
         elif action == "switchpage_to_challenge_ai":
             self._switch_page("challenge_ai")
 
-        elif action == "kill_main_process":
+        elif action == "exit":
             utils.set_global_var(
                 self.session,
                 "app_events",
-                [{"page": "Global", "event": "kill_main_process", "opts": {}}],
+                [{"page": "Global", "event": "exit", "opts": {}}],
             )
 
     def _fill_ongoing_page(self):
@@ -204,25 +188,13 @@ class MenuWin:
         for game in ongoing_games:
             if screen[2].startswith("Loading"):
                 screen[2] = " vs " + game["opponent"]["username"]
-                page_actions["ongoing"][2] = game["gameId"]
+                page_actions["ongoing"][2] = [game["gameId"], game["color"]]
 
             else:
                 screen.insert(-1, (" vs " + game["opponent"]["username"]))
-                page_actions["ongoing"].insert(-1, game["gameId"])
+                page_actions["ongoing"].insert(-1, [game["gameId"], game["color"]])
 
             self.buffer[:] = screen
-
-    def do_action_seek(self, action: str):
-        if action == "create_seek":
-            assert self.page == "seek", "Page is not seek so wrong action"
-            time = self._find_numbers_from_string(self.buffer[2])[0]
-            inc = self._find_numbers_from_string(self.buffer[3])[0]
-            rated = True if self.buffer[4].lower().find("true") != -1 else False
-
-            newgame = self.client.board.seek(time, inc, rated)
-
-        elif action == "switchpage_to_home":
-            self._switch_page("home")
 
     def do_action_challenge_open(self, action: str):
         if action == "switchpage_to_home":
@@ -240,7 +212,12 @@ class MenuWin:
             level = self._find_numbers_from_string(buffer_text[2])[0]
             clock_limit_seconds = self._find_numbers_from_string(buffer_text[3])[0]
             clock_inc = self._find_numbers_from_string(buffer_text[4])[0]
-            color = "black" if buffer_text[4].lower().find("black") != -1 else "white"
+            if buffer_text[5].lower().find("black") != -1:
+                color = "black"
+            elif buffer_text[5].lower().find("white") != -1:
+                color = "white"
+            else:
+                color = choice(["black", "white"])
 
             response = self.client.challenges.create_ai(
                 level=level,
@@ -253,7 +230,7 @@ class MenuWin:
                 {
                     "page": "Home",
                     "event": "startgame",
-                    "opts": {"gameId": response["id"]},
+                    "opts": {"gameId": response["id"], "color": color},
                 }
             )
             utils.set_global_var(self.session, "app_events", app_events)

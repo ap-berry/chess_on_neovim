@@ -38,7 +38,9 @@ class InputWin:
             "InputWindow",
         )
 
-        self._set_extmarks()
+        self.hl_group_error = "InputWinError"
+        self.hl_group_placeholder = "InputWinPlaceHolder"
+        self.set_extmarks()
         self._set_buffer_keymaps()
         self._set_window_highlights()
 
@@ -49,15 +51,35 @@ class InputWin:
             "NormalFloat",
             {"ctermbg": "Black", "ctermfg": "White"},
         )
+        self.session.api.set_hl(
+            self.window_namespace,
+            "InputWinPlaceHolder",
+            {"ctermbg": "Grey", "ctermfg": "White", "blend": 0},
+        )
+        self.session.api.set_hl(
+            self.window_namespace,
+            "InputWinError",
+            {
+                "ctermbg": "Red",
+                "ctermfg": "White",
+                "blend": 0,
+            },
+        )
 
-    def _set_extmarks(self):
+    def set_extmarks(
+        self,
+        text: str = "Type action and Enter            ",
+        hl: str = "InputWinPlaceHolder",
+    ):
         # self.session.command("highlight InputWinHelpText guifg=Blue guibg=Red")
         extmark_opts = utils.ExtmarksOptions(
-            end_row=0,
             end_col=0,
+            end_row=0,
             sign_text=self.sign_text,
             sign_hl_group=self.sign_text_hl_group,
             id=1,
+            virt_text=[[text, hl]],
+            virt_text_pos="overlay",
         )
         utils.buf_set_extmark(
             nvim=self.session,

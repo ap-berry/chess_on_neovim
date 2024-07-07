@@ -4,12 +4,14 @@ function inputWinCallback()
 
     if input == "menu" then
         append_event("Game", "kill_game_window", {})
-    elseif input == "kill_main" then
-        append_event("Global", "kill_main_process", {})
+    elseif input == "exit" then
+        append_event("Global", "exit", {})
     elseif input == "resign" then
         append_event("Game", "resign", {})
     elseif input == "abort" then
         append_event("Game", "abort", {})
+    elseif input == "flip" then
+        append_event("Game", "flip", {})
     elseif input ~= "" then 
         append_event("Game", "make_move", {move=input})
     end

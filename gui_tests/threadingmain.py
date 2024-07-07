@@ -1,7 +1,7 @@
 from threading import Thread, Lock
 from time import sleep
 from typing import Literal, Optional, TypedDict
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
 import os
 
 from pynvim import attach
@@ -88,19 +88,26 @@ def read_events():
                     print("game is starting")
                     menuWin.kill_window()
                     menuWin = None
-                    gameWinManager = GameWinManager(nvim, opts["gameId"])
+                    gameWinManager = GameWinManager(
+                        nvim, opts["gameId"], client, opts["color"]
+                    )
 
             elif app_event["page"] == "Game":
                 if app_event["event"] == "make_move":
-                    gameWinManager.client_make_move(client, opts["move"])
-                if app_event["event"] == "resign":
-                    gameWinManager.client_resign(client)
-                if app_event["event"] == "kill_game_window":
+                    gameWinManager.client_make_move(opts["move"])
+                elif app_event["event"] == "resign":
+                    gameWinManager.client_resign()
+                elif app_event["event"] == "kill_game_window":
                     gameWinManager.destroy()
                     gameWinManager = None
                     menuWin = MenuWin(nvim, client)
+                elif app_event["event"] == "flip":
+                    gameWinManager.flip_board()
+                else:
+                    raise Exception(f"APP EVENT {app_event} CASE NOT IMPLEMENTED")
+
             elif app_event["page"] == "Global":
-                if app_event["event"] == "kill_main_process":
+                if app_event["event"] == "exit":
                     try:
                         if menuWin:
                             menuWin.kill_window()
