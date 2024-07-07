@@ -19,6 +19,17 @@ for the pip related deps:
 ## Instructions:
 
 ### To run
+First create an API TOKEN from lichess.org
+with the following permissions:
+![alt text](resources/perms.png)
+![alt text](<resources/perms 2.png>)
+
+To create a token head over to your `profile` and then to API Access Tokens and add a token 
+![alt text](<resources/steps 1 2.png>)
+![alt text](<resources/step 3.png>)
+
+
+
 install dependencies and clone the repo to your desired folder
 
 then run a neovim instance from the terminal with the options --listen 127.0.0.1:6789
