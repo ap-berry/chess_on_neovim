@@ -1,25 +1,33 @@
 # Chess on Neovim
 
-Finally, this a working demo-ish prototype.
-Currently only playable with lichess stockfish on standard variation.
-Multiplayer might come soon.
-Other Variation support might come soon.
+Inspired by `cli-chess` by trevorbayless
+
+This is version 0.1.0 of the chess on neovim project
+
+This version has support for
+1. Multiplayer chess using lichess api
+2. Playing against stockfish level 1 to 8
+3. Joining currently ongoing games
+4. All variant support for all variants on lichess
+5. Multiple themes
+6. Custom themes created from a single file
 
 ## Runtime Dependencies include:
 1. berserk
 2. chess
-3. python-dotenv
-4. pynvim
-5. python version 3.9 (haven't tested on other versions yet)
-6. neovim version 9 (again haven't tested yet since this is a prototype)
+3. pynvim
+4. python version >= 3.9 
+5. neovim version >= 3.9 (versions below 3.9 have unexpected highlight issues)
 
 for the pip related deps:
-`pip3 install berserk chess python-dotenv pynvim`
+`pip3 install berserk chess pynvim`
 
 ## Instructions:
 
 ### To run
-First create an API TOKEN from lichess.org
+YOU WILL NEED AN API TOKEN TO PLAY!
+
+Create an API TOKEN from lichess.org
 with the following permissions:
 
 ![alt text](resources/perms.png)
@@ -40,12 +48,13 @@ run this command with your API TOKEN
 replace `<API TOKEN>` with your token
 
 
-install dependencies:
 
-then run a neovim instance from the terminal with the options --listen 127.0.0.1:6789
+install the dependencies and run a neovim instance from the terminal with the options --listen 127.0.0.1:6789
 `nvim --listen 127.0.0.1:6789`
 
-after that run the `gui_tests/threadingmain.py` python file from the repo directory
+after that run the `gui_tests/threadingmain.py` python file from the repo directory `chess_on_neovim` in a separate terminal
+
+`python3 gui_tests/threadingmain.py`
 
 that should be it
 
@@ -53,23 +62,28 @@ that should be it
 the small windows on top of the board and stats when playing a game is the input window
 
 it acts as console which takes inputs on Enter
-currently theses command are defined
+
+currently these command are defined
 
 | command | Action |
 | -------- | ---------|
 | 'menu' | Return to main menu|
 | 'exit' | Kill the game windows and stop the python process |
-| 'resign' | For when you accidentally start the match on stockfish level 8 |
-| 'abort' | Same reason |
+| 'resign' | Resigns/Aborts the game |
+| 'abort' | Resigns/Aborts the game |
 | 'flip' | Flips the Board |
 
 
 it treats all other inputs as making a move.
+ALL MOVES ARE CASE-SENSITIVE AND MUST BE IN `SAN` NOTATION
+e.g
+1. e4 e5
+2. Nf3 Nc6
 
-if an illegal move / incorrect move is made it shows a basic 'An error has occured' text in red inside the input window
+### Issues / Missing Features:
 
-### Issues:
-
-Highlights make the board updates flicker when making moves [SOLVED]
-
-Installation is too complicated.
+1. Highlights make the board updates flicker when making moves [SOLVED]
+2. Api requests can block the app due to not being async
+3. Stats Window does not have highlights
+4. Error Window has not themeing
+5. Only supported on linux.
