@@ -11,7 +11,6 @@ from threading import Lock
 from berserk import Client
 from errorwin import ErrorWin
 from typing import Literal
-from dotenv import set_key, load_dotenv
 from os import getenv
 from berserk import TokenSession
 from gameWin import GameWinManager,GameClock
