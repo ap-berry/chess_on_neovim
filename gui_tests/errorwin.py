@@ -1,6 +1,5 @@
 from pynvim.api import Nvim
 import utils
-from pynvim import attach
 
 
 class ErrorWin:
@@ -32,7 +31,7 @@ class ErrorWin:
         self._set_end_line_number()
         utils.noremap_lua_callback(
             self.session,
-            "/mnt/Study And Code/project/chess_on_neovim/gui_tests/lua/errorcallback.lua",
+            "./gui_tests/lua/errorcallback.lua",
             "<CR>",
             "<cmd>lua ErrorWinCallBack()<CR>",
             insertmodeaswell=True,
@@ -59,9 +58,3 @@ class ErrorWin:
         utils.buf_set_lines(nvim=self.session, buf=self.buffer, text=self.error_text)
         self._set_nomodifiable()
         utils.force_redraw(nvim=self.session)
-
-
-def test():
-    nvim = attach("tcp", "127.0.0.1", 6789)
-
-    errwin = ErrorWin(nvim, "JUDGEMENT\n NEAHHHHHHHHHHHHHHH")

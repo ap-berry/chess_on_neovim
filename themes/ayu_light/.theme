@@ -1,0 +1,154 @@
+# Use '#' at the begining of the line to write comments
+# Each highlight is as follows
+# [name]
+# option=value
+# option=value
+# DO NOT CHANGE THE NAMES OF THE HIGHLIGHTS, ONLY THE OPTIONS AND VALUES
+# The highlight options must be according to the options provided in https=//neovim.io/doc/user/api.html#nvim_set_hl()
+# NOTE some options might not work if you are using a Neovim version lower than 9
+# NOTE DO NOT REMOVE OR MODIFY THE {endfile} LINE AT THE BOTTOM AS DOING SO WILL BREAKS THINGS
+# All highlights will be saved to the global namespace so longer names have been
+# implemented as to avoid name conflicts
+
+#Menu/Home Window Related Highlights
+
+[MenuBackground]
+bg=#FCFCFC
+fg=#E6BA7E
+ctermbg=231
+ctermfg=180
+
+[MenuCursorLine]
+bg=#ED9366
+fg=#F8F9FA
+ctermbg=209
+ctermfg=231
+
+# Chess Board Highlights
+
+[BoardWindowBackground]
+ctermbg=None
+ctermfg=White
+
+[BoardWindowFloatBorder]
+ctermbg=None
+
+[ChessBoardBorder]
+bg=#FCFCFC
+fg=#F07171
+ctermbg=Black
+ctermfg=White
+bold=True
+blend=0
+
+[ChessBoardWhiteSquare]
+bg=White
+fg=#131721
+ctermbg=White
+ctermfg=Black
+bold=True
+blend=0
+standout=False
+
+[ChessBoardBlackSquare]
+bg=#FFAA33
+fg=#131721
+ctermbg=DarkBlue
+ctermfg=Black
+bold=True
+blend=0
+
+[ChessBoardSpecialWhiteSquare]
+bg=#c9c9c9
+fg=#131721
+ctermbg=White
+ctermfg=Black
+bold=True
+blend=0
+standout=False
+
+[ChessBoardSpecialBlackSquare]
+bg=#b57821
+fg=#131721
+ctermbg=DarkBlue
+ctermfg=Black
+bold=True
+blend=0
+
+[ChessBoardChecked]
+bg=#E65050
+fg=Black
+ctermbg=Red
+ctermfg=Black
+bold=True
+blend=0
+
+[ChessBoardMovedFrom]
+bg=#AAD94C
+fg=Black
+ctermbg=Green
+ctermfg=Black
+bold=True
+blend=0
+
+
+[ChessBoardMovedTo]
+bg=#7FD962
+fg=Black
+ctermbg=LightGreen
+ctermfg=Black
+bold=True
+blend=0
+
+
+[ChessBoardSpecialMovedFrom]
+bg=#AAD94C
+fg=Black
+ctermbg=Green
+ctermfg=Black
+bold=True
+blend=0
+
+
+[ChessBoardSpecialMovedTo]
+bg=#7FD962
+fg=Black
+ctermbg=LightGreen
+ctermfg=Black
+bold=True
+blend=0
+
+
+# Status Window Highlights
+
+
+[StatsWinBackground]
+ctermbg=White
+ctermfg=Black
+
+
+[StatsWinFloatBorder]
+ctermbg=None
+
+# Input Window HighLights
+
+[InputBackground]
+bg=#FCFCFC
+fg=#FF8F40
+ctermbg=Black
+ctermfg=Yellow
+blend=0
+
+[InputWinError]
+bg=Red
+fg=White
+ctermbg=Red
+ctermfg=White
+blend=0
+
+[InputWinPlaceHolder]
+bg=None
+fg=Grey
+ctermfg=Grey
+blend=0
+

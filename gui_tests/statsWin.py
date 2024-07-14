@@ -1,11 +1,10 @@
-from pynvim.api import Nvim, Buffer, Window
+from pynvim.api import Nvim 
 from utils import *
 from berserk.utils import to_millis
-from datetime import datetime
-from typing import Literal, Dict, TypedDict, Optional, Union
-from chess import Move, Board
-
-
+from typing import Literal, TypedDict, Optional, Union
+from chess import Board
+from stats_utils import timems_to_incstring, timems_to_timestring, white_pieces_taken, black_pieces_taken
+from game_clock import GameClock
 class StatsDict(TypedDict, total=False):
     wname: str
     wflair: str
@@ -43,156 +42,197 @@ class StatsWin:
     def __init__(
         self,
         session: Nvim,
-        relative_to_win: Window,
-        stats: Optional[StatsDict] = None,
         window_config: Optional[dict] = None,
+        myside: Literal['white', 'black'] = "white"
     ):
-        self.stats = stats
-        self.session = session
+        self.neovim_session = session
 
+        
         self.buffer = find_buf(session, "stats_buffer") or create_buf(
             session, "stats_buffer"
         )
 
         self.window = find_window_from_title(session, "StatsWindow") or create_window(
-            self.session,
+            self.neovim_session,
             self.buffer,
             False,
-            window_config or config_gen(session, config="stats", win=relative_to_win),
+            window_config or config_gen(session, config="stats"),
             "StatsWindow",
         )
-
-        self.augroup = self.session.api.create_augroup(
+        self.namespace = namespace(self.neovim_session, "StatusWinExtmarkNS")
+        win_set_local_winhighlight(self.neovim_session, self.window, "Normal:StatsWinBackground,FloatBorder:StatsWinFloatBorder")
+        
+        self.augroup = self.neovim_session.api.create_augroup(
             "StatsWinAuGroup", {"clear": True}
         )
-        self.window_namespace = namespace(self.session, "StatusWinNS")
 
-        if stats:
-            self.set_stats(stats=stats)
-            self.gui_initialized = True
-        else:
-            global empty_stats
-            self.displayable_stats = empty_stats
-            self.gui_initialized = False
+        self.flip = myside != "white"
 
-        self._set_window_highlights()
+
+        self.gameclock = None
+
+        
+    def handle_gameFull_event(self, event, board):
+        self.gameclock = self._create_gameclock(event)
+        if " " in event['state']['moves']:
+            self.gameclock.start()
+        self.virt_lines = self._create_stats_extmark_virt_lines(event, board)
+        self.redraw()
+    
+    def _create_gameclock(self, event):
+        state = event
+        if event['type'] == "gameFull":
+            state = event['state']
+            
+        current_playing_side = "white"
+        if state['moves'] != "":
+            current_playing_side = "white" if len(state['moves'].split(" ")) % 2 == 0 else "black"
+        return GameClock(state['wtime'], state['winc'], state['btime'], state['binc'], current_playing_side)
+
+    def update_times(self):
+        self.virt_lines[0][0][0] = timems_to_timestring(self.gameclock.black_time)
+        self.virt_lines[0][2][0] = timems_to_incstring(self.gameclock.black_inc)
+        
+        self.virt_lines[-1][0][0] = timems_to_timestring(self.gameclock.white_time)
+        self.virt_lines[-1][2][0] = timems_to_incstring(self.gameclock.white_inc)
+        self.redraw()
+    
+    def flip_stats(self):
+        self.flip = not self.flip
+        self.redraw()
+    
+    def redraw(self):
+        """ Redraws from self.virt_lines If self.virt_lines is unchanged so is the buffer"""
+        _virt_lines = self.virt_lines
+        if self.flip:
+            _virt_lines = self.virt_lines[::-1][:2:] + self.virt_lines[2:-2] + self.virt_lines[:2:][::-1]
+        buf_set_extmark(self.neovim_session, self.buffer, self.namespace, 0, 0, ExtmarksOptions(
+                id=1,
+                virt_lines=_virt_lines
+        ))
+        force_redraw(self.neovim_session)
+    
+    def handle_gameState_event(self, gameState, board):
+        if not self.gameclock.started:
+            self.gameclock.start()
+        
+        status = gameState["status"]
+        spacer = [" ", ""]
+        
+        self.gameclock = self._create_gameclock(gameState)
+        if " " in gameState['moves']:
+            self.gameclock.start()
+        
+        #lines
+        
+        self.virt_lines[0] =  [[timems_to_timestring(to_millis(gameState['btime'])), ""], spacer, [timems_to_incstring(to_millis(gameState['binc'])), ""]]
+
+        moves = split_list(self.last_6_moves_in_san(board), 3)
+        new_move_lines = []
+        for ln in moves:            
+            line = []
+            for move in ln:
+                line.append([move, ""])
+                line.append(spacer)
+            new_move_lines.append(line)
+        
+        if status != "started":
+            self.gameclock.stop()
+            score = ""
+            if "winner" in gameState:
+                score = self.get_score(gameState['winner'])
+            elif status != "aborted":
+                score = self.get_score("draw")
+                
+            new_status_line =  [spacer, [score, ""], spacer, [status, ""]]
+            self.virt_lines[-3] = new_status_line
+        
+        
+        self.virt_lines = self.virt_lines[:2] + new_move_lines + self.virt_lines[-3:]
+        
+        self.virt_lines[-1] = [[timems_to_timestring(to_millis(gameState['wtime'])), ""], spacer, [timems_to_incstring(to_millis(gameState['winc'])), ""]]
+            
         self.redraw()
 
-    def _set_window_highlights(self):
-        self.session.api.win_set_hl_ns(self.window, self.window_namespace)
-        self.session.api.set_hl(
-            self.window_namespace,
-            "NormalFloat",
-            {"fg": "White", "ctermbg": "Black", "ctermfg": "White"},
+            
+    def kill_window(self):
+        self.neovim_session.api.win_close(self.window, True)
+        self.neovim_session.api.buf_delete(self.buffer, {"force": True})
+
+    def resize(self):
+        self.neovim_session.api.win_set_config(
+            self.window,
+            {
+                "relative": "editor",
+                "row": (workspace_height(self.neovim_session) - 11) // 2,
+                "col": (workspace_width(self.neovim_session) - 30 - 32) // 2, 
+            }
         )
 
-    def destroy(self):
-        self.session.api.win_close(self.window, True)
-        self.session.api.buf_delete(self.buffer, {"force": True})
+    def _create_stats_extmark_virt_lines(self, gameFull, board):        
+        self.gameFull = gameFull
+        self.gameState = gameFull['state']
+        white = self.gameFull['white']
+        black = self.gameFull["black"]
+        
+        spacer = [" ", ""]
+        virt_lines = []
+        virt_lines.append(
+            [[timems_to_timestring(self.gameState['btime']), ""], spacer, [timems_to_incstring(self.gameState['binc']), ""]]
+        )
 
-    def redraw(self):
-        """Note: DOES NOT APPLY CHANGES TO GUI UNLESS self.displayable_stats IS UPDATED"""
-        buf_set_lines(nvim=self.session, buf=self.buffer, text=self.displayable_stats)
-        force_redraw(nvim=self.session)
+        if "aiLevel" in black:
+            virt_lines.append(
+                [[f"StockFish Level {black['aiLevel']}", ""]]
+            )
+        else:
+            virt_lines.append(
+                [[black['name'], ""], spacer, [black['title'] or "", ""], spacer, [str(black['rating']), ""]]
+            )
+        
+        # # wpt = white_pieces_taken(board)
+        # # bpt = black_pieces_taken(board)        
+        
+        
+        moves = split_list(self.last_6_moves_in_san(board), 3)
+        line = []
+        for ln in moves:            
+            line = []
+            for move in ln:
+                line.append([move, ""])
+                line.append(spacer)
+            virt_lines.append(line)
+            
+        virt_lines.append(
+            [spacer, ["Mystatus is shit", ""]]
+        )
+        
+        
+        if "aiLevel" in white:
+            virt_lines.append(
+                [[f"StockFish Level {white['aiLevel']}", ""]]
+            )
+        else:
+            virt_lines.append(
+                [[white['name'], ""], spacer, [white['title'] or "", ""], spacer, [str(white['rating']), ""]]
+            )        
+        virt_lines.append(
+            [[timems_to_timestring(self.gameState['wtime']), ""], spacer, [timems_to_incstring(self.gameState['winc']), ""]]
+        )
+        return virt_lines
 
-    def set_ingame_displayable_stats(self):
-        self.displayable_stats = self._create_displayable_stats_ingame()
-
-    def set_winner_displayable_stats(
-        self, winner: Literal["white", "black", "draw"], msg: str
+    def get_score(
+        self, winner: Literal["white", "black", "draw"]
     ):
         if winner == "white":
-            self.score = "1-0"
+            return "1-0"
         elif winner == "black":
-            self.score = "0-1"
+            return "0-1"
         else:
-            self.score = "1/2-1/2"
-
-        self.winner_msg = msg
-
-        self.displayable_stats = self._create_displayable_stats_winner()
-
-    def set_style(self, style: dict = None):
-        self.lborder = "|"
-        self.lpad = " "
-        self.spacer = "  "
-        self.bar = "=" * 28
-
-    def set_gameFull_stats(self, gameFullEvent):
-        black = gameFullEvent["black"]
-        white = gameFullEvent["white"]
-        state = gameFullEvent["state"]
-
-        if "id" in black:
-            self.bname = black["name"]
-            self.bflair = "@"
-            self.brating = str(black["rating"])
-            self.btitle = black["title"] or "--"
-
-        elif "aiLevel" in black:
-            self.bname = "StockFish" + str(black["aiLevel"])
-            self.bflair = "@"
-            self.brating = ""
-            self.btitle = ""
-
-        else:
-            self.bname = "Anonymous"
-            self.bflair = " "
-            self.brating = ""
-            self.btitle = ""
-
-        if "id" in white:
-            self.wname = white["name"]
-            self.wflair = "@"
-            self.wrating = str(white["rating"])
-            self.wtitle = white["title"] or "--"
-
-        elif "aiLevel" in white:
-            self.wname = "StockFish" + str(white["aiLevel"])
-            self.wflair = "@"
-            self.wrating = ""
-            self.wtitle = ""
-
-        else:
-            self.wname = "Anonymous"
-            self.wflair = " "
-            self.wrating = ""
-            self.wtitle = ""
-
-        self.speed = gameFullEvent["speed"]
-
-        if not self.gui_initialized:
-            self.gui_initialized = True
-
-    def set_pieces_ate(self):
-        self.bate = "todo"
-        self.wate = "todo"
-
-    def set_stats(self, stats: StatsDict):
-        self.wname = stats["wname"]
-        self.wflair = stats["wflair"]
-        self.wtime = self._timems_to_timestring(stats["wtime"])
-        self.winc = self._timems_to_incstring(stats["winc"])
-        self.wtitle = stats["wtitle"]
-        self.wrating = str(stats["wrating"])
-        self.wate = "todo"
-
-        self.bname = stats["bname"]
-        self.bflair = stats["bflair"]
-        self.btime = self._timems_to_timestring(stats["btime"])
-        self.binc = self._timems_to_incstring(stats["binc"])
-        self.btitle = stats["btitle"]
-        self.brating = str(stats["brating"])
-        self.bate = "todo"
-
-        if not self.gui_initialized:
-            self.gui_initialized = True
-
-    def set_ingame_displayable_stats(self):
-        self.displayable_stats = self._create_displayable_stats_ingame()
+            return "1/2-1/2"
 
     def set_autocmd(self, handle: int):
-        self.session.api.create_autocmd(
+        self.neovim_session.api.create_autocmd(
             "BufEnter",
             {
                 "group": self.augroup,
@@ -201,241 +241,22 @@ class StatsWin:
             },
         )
 
-    def set_times(
-        self,
-        wtime: Optional[Union[datetime, int]] = None,
-        btime: Optional[Union[datetime, int]] = None,
-        winc: Optional[int] = None,
-        binc: Optional[int] = None,
-    ):
-        """at least one time needs to be given.
-        time must be datetime obj or miliseconds
-        Increments must be in miliseconds
-        """
-        assert wtime or btime, "at least one time needs to be given"
-
-        if wtime:
-            self.wtime = self._timems_to_timestring(
-                to_millis(wtime) if type(wtime) is not int else wtime
-            )
-        if btime:
-            self.btime = self._timems_to_timestring(
-                to_millis(btime) if type(btime) is not int else btime
-            )
-
-        if winc != None:
-            self.winc = str(winc // 1000)
-
-        if binc != None:
-            self.binc = str(binc // 1000)
-
     def _set_current(self):
-        self.session.current.buffer = self.buffer
+        self.neovim_session.current.buffer = self.buffer
 
-    @staticmethod
-    def _timems_to_incstring(timems: int):
-        assert timems <= 180 * 1000, "Increment cannot exceed 180s"
-        m = timems // 60000 % 60
-        s = timems // 1000 % 60
-        return f"{m}:{ s if s > 9 else '0'+str(s)}"
-
-    @staticmethod
-    def _timems_to_timestring(timems: int):
-        h = timems // 3600000
-        m = timems // 60000 % 60
-        s = timems // 1000 % 60
-        ms = timems % 3600000  # todo
-        return f"{ str(h)+':' if h != 0 else '' }{ m if m > 9 else '0'+str(m) }:{ s if s > 9 else '0'+str(s) }"
-
-    def _create_displayable_stats_winner(self) -> list[str]:
-        assert self.gui_initialized == True, "Stats not initialized with data"
-        return [
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.bname,
-                    self.bflair,
-                    self.spacer,
-                    self.btitle,
-                    self.spacer,
-                    self.brating,
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.btime,
-                    self.spacer,
-                    self.binc,
-                    self.spacer,
-                    self.bate,
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                ]
-            ),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.spacer,
-                    self.spacer,
-                    "score:",
-                    self.spacer,
-                    self.score,
-                ]
-            ),
-            "".join([self.lborder, self.lpad, self.winner_msg]),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.wtime,
-                    self.spacer,
-                    self.winc,
-                    self.spacer,
-                    self.wate,
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.wname,
-                    self.wflair,
-                    self.spacer,
-                    self.wtitle,
-                    self.spacer,
-                    self.wrating,
-                ]
-            ),
-        ]
-
-    def _create_displayable_stats_ingame(self) -> list[str]:
-        assert self.gui_initialized == True, "Stats not initialized with data"
-        return [
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.bname,
-                    self.bflair,
-                    self.spacer,
-                    self.btitle,
-                    self.spacer,
-                    self.brating,
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.btime,
-                    self.spacer,
-                    self.binc,
-                    self.spacer,
-                    self.bate,
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.index[0],
-                    " ",
-                    self.formatted_moves[0],
-                    self.spacer,
-                    self.formatted_moves[1],
-                ]
-            ),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.index[1],
-                    " ",
-                    self.formatted_moves[2],
-                    self.spacer,
-                    self.formatted_moves[3],
-                ]
-            ),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.index[2],
-                    " ",
-                    self.formatted_moves[4],
-                    self.spacer,
-                    self.formatted_moves[5],
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.wtime,
-                    self.spacer,
-                    self.winc,
-                    self.spacer,
-                    self.wate,
-                ]
-            ),
-            "".join([self.lborder, self.bar]),
-            "".join(
-                [
-                    self.lborder,
-                    self.lpad,
-                    self.wname,
-                    self.wflair,
-                    self.spacer,
-                    self.wtitle,
-                    self.spacer,
-                    self.wrating,
-                ]
-            ),
-        ]
-
-    def set_moves(self, board: Board):
-        """The board must at the position of the latest move"""
+    def last_6_moves_in_san(self, board: Board):
+        """Returns the last 6 moves in SAN notation with their corresponding numbers in the list e.g `["1.", "e4", "e5", "2.", "Nf3" ...]`"""
         # change formatted_moves list, change index list
-
-        last6 = []
-        moves_index = []
-        _board = (
-            Board()
-        )  # empty board because variation san plays the moves in sequence
-        half_move_count = len(board.move_stack)
-        offset = 3
-        if half_move_count % 2 != 0:
-            offset = 2
-        _move_list = _board.variation_san(board.move_stack).split(" ")[-(6 + offset) :]
-        for i, m in enumerate(_move_list):
-            if i % 3 == 0:
-                moves_index.append(m)
-            else:
-                last6.append(m)
-
-        if len(moves_index) < 3:
-            moves_index += ["  " for i in range(3 - len(moves_index))]
-        if len(last6) < 6:
-            last6 += ["----" for i in range(6 - len(last6))]
-
-        self.formatted_moves = last6
-        self.index = moves_index
-
-    def __str__(self) -> str:
-        self.displayable_stats = self._create_displayable_stats_ingame()
-        return "\n".join(self.displayable_stats)
+        last_movestack = board.move_stack[-6:]
+        _board = board.copy()
+        for i in range(len(last_movestack)):
+            _board.pop()
+        _move_list = _board.variation_san(last_movestack).split(" ")
+        if "..." in _move_list[0]:
+            _move_list.pop(0)
+        
+        moves_len = len(_move_list)
+        if  moves_len < 9:
+            _move_list+=[" " for i in range(9-moves_len)]
+            
+        return _move_list

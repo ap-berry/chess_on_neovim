@@ -50,7 +50,9 @@ the small windows on top of the board and stats when playing a game is the input
 
 it acts as console which takes inputs on Enter
 currently theses command are defined
+
 | command | Action | 
+
 | 'menu' | Return to main menu|
 | 'exit' | Kill the game windows and stop the python process |
 | 'resign' | For when you accidentally start the match on stockfish level 8 |

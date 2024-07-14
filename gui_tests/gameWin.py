@@ -3,144 +3,177 @@ from statsWin import StatsWin
 from inputWin import InputWin
 from game_clock import GameClock
 
+from chess.variant import find_variant
 from chess import Board, Move
 from pynvim import Nvim
 from berserk import Client
 
 from typing import Literal
+import utils
 
-
+from pynvim.api import Window
 class GameWinManager:
     def __init__(
         self,
         session: Nvim,
         gameId: str,
         client: Client,
-        myside: Literal["black", "white"],
+        myside: Literal["black", "white"],        
     ) -> None:
-        self.session = session
+        self.neovim_session = session
         self.gameId = gameId
         self.client = client
 
-        parent_window = self.session.current.window
+        self.game = None
+        games = self.client.games.get_ongoing()
+        for game in games:
+            if self.gameId == game['gameId']:
+                self.game = game
+        
+        if not self.game:
+            return
+                
+        self.variant = self.game['variant']['key']
+        
 
-        self.chessBoard = Board()
+        if self.variant != "fromPosition": 
+            self.chessBoard = find_variant(self.variant)()
+        else:
+            self.chessBoard = Board()
+         
+         
         self.boardWin = BoardWin(
-            session=self.session,
+            session=self.neovim_session,
             board=self.chessBoard,
-            relative_to_win=parent_window,
             myside=myside,
+            variant=self.variant,
         )
-        self.statsWin = StatsWin(session=self.session, relative_to_win=parent_window)
-        self.inputWin = InputWin(session=self.session, relative_to_win=parent_window)
+        
+        self.statsWin = StatsWin(
+            session=self.neovim_session,
+            myside=myside
+        )
+        
+        self.inputWin = InputWin(
+            session=self.neovim_session,
+        )
+        
+        # self.dummy_buffer = utils.find_buf(self.neovim_session, "dummy_buf") or utils.create_buf(self.neovim_session, "dummy_buf", False)
+        # self.dummy_window = self.neovim_session.api.open_win(self.dummy_buffer, False, {"relative": "editor", "row": 0, "col": 0, "width": 10, "height": 5, "style": "minimal", "border": "single"})
         self.myside = myside
         self.gameClock = None
 
         self.boardWin.set_autocmd(self.inputWin.window.handle)
-        self.statsWin.set_autocmd(self.inputWin.window.handle)
 
-        self.session.api.set_current_win(self.inputWin.window)
+        if self.statsWin:
+            self.statsWin.set_autocmd(self.inputWin.window.handle)
+
+        self.neovim_session.api.set_current_win(self.inputWin.window)
 
     def flip_board(self):
         self.boardWin.flip_board()
+        if self.statsWin:
+            self.statsWin.flip_stats()
+        self.inputWin.set_extmarks()
+        
 
     def client_make_move(self, move: str):
-        # try
+        self.inputWin.set_extmarks(" move:"+move)
         side = self.myside == "white"
         if side != bool(self.boardWin.board.turn):
             self.inputWin.set_extmarks(
-                "Not Your Turn          ", self.inputWin.hl_group_error
+                " Not Your Turn          ", self.inputWin.hl_group_error
             )
             return
-        else:
-            self.inputWin.set_extmarks()
-
         try:
             move = self.boardWin.board.parse_san(move)
-            self.client.board.make_move(self.gameId, move.uci())
         except:
             self.inputWin.set_extmarks(
-                "An Error Occured         ", self.inputWin.hl_group_error
+                " Illeagal Move         ", self.inputWin.hl_group_error
+            )
+            return
+        
+        try:
+            self.client.board.make_move(self.gameId, move.uci())
+        except Exception as e:
+            self.inputWin.set_extmarks(
+                " Something Went Wrong         ", self.inputWin.hl_group_error
             )
 
     def client_resign(self):
         self.client.board.resign_game(self.gameId)
+        self.inputWin.set_extmarks(" resigned")
+        
 
-    def decrement_game_clock(self):
-        if not self.gameClock or not self.gameClock.started:
+    def decrement_game_clock(self, update_interval: int = 1000):
+        """update interval must be in milliseconds"""
+        if not self.statsWin or not self.statsWin.gameclock or not self.statsWin.gameclock.started:
             return
-        elapsed_time = self.gameClock.player_and_time_ms()
-        side = elapsed_time[0]
-        time = elapsed_time[1]
-        if time > 1000:
+        remaining = self.statsWin.gameclock.player_and_time_ms()
+        side = remaining[0]
+        time = remaining[1]
+        if time > update_interval:
             if side == "black":
-                self.gameClock.black_time = time
-                self.statsWin.set_times(btime=time)
+                self.statsWin.gameclock.black_time = time
             else:
-                self.gameClock.white_time = time
-                self.statsWin.set_times(wtime=time)
+                self.statsWin.gameclock.white_time = time
+                
+            self.statsWin.update_times()
 
-            self.statsWin.set_ingame_displayable_stats()
-            self.statsWin.redraw()
-
-    def process_new_event(self, event):
-        if event["type"] == "gameStart":
-            gameFinished = False
-            game = event["game"]
-            self.boardWin.redraw_from_fen(game["fen"], game["lastMove"])
-
-            if event["game"]["color"] == "black":
-                self.current_playing_side = (
-                    "black" if event["game"]["isMyTurn"] else "white"
-                )
-            if event["game"]["color"] == "white":
-                self.current_playing_side = (
-                    "white" if event["game"]["isMyTurn"] else "black"
-                )
-
-        elif event["type"] == "gameFull":
-            self.configure_gameclock(event)
-            # update board move stack for middle of match connections
+    def handle_game_event(self, event):
+        if "page" in event:
+            options = event['opts']
+            action = options['action']
+            if action == "make_move":
+                self.client_make_move(event['opts']["move"])
+            elif action == "flip":
+                self.flip_board()
+            elif action == "resign":
+                self.client_resign()
+            elif action == "abort":
+                self.client_resign()
+            else:
+                raise Exception("input action not implemented"+ action)
+        elif event['type'] == "gameFull":
+            
+            if event['variant']['key'] == "fromPosition":
+                self.boardWin.board.set_fen(event['initialFen']) 
+            
             state = event["state"]
             moves = state["moves"].split(" ")
-
             if moves[0] != "":
-                moves = list(map(Move.from_uci, moves))
-                self.boardWin.board.move_stack = moves.copy()
-
-            self.statsWin.set_gameFull_stats(event)
-            self.statsWin.set_times(
-                winc=event["state"]["winc"],
-                wtime=event["state"]["wtime"],
-                binc=event["state"]["binc"],
-                btime=event["state"]["btime"],
-            )
-            self.statsWin.set_style()
-            self.statsWin.set_pieces_ate()
-            self.statsWin.set_moves(self.boardWin.board)
-            self.statsWin.displayable_stats = (
-                self.statsWin._create_displayable_stats_ingame()
-            )
-            self.statsWin.redraw()
-
-        elif event["type"] == "gameState":
-            self.process_gameState_event(event)
-
-        elif event["type"] == "gameFinish":
-            self.gameClock = None
-
-            gameFinished = True  # will be useful when implementing input
-            print("\nto do EVENT: " + event["type"] + "\n")
-
-        else:
-            print("\nto do EVENT: " + event["type"] + "\n")
-
-    def destroy(self):
+                for move in moves:
+                    self.boardWin.board.push(Move.from_uci(move))
+                            
+                self.boardWin.redraw(lastMove=self.boardWin.board.move_stack[-1])
+            else:
+                self.boardWin.redraw(lastMove="")
+                
+            if self.statsWin:
+                self.statsWin.handle_gameFull_event(event, self.boardWin.board)
+            
+        elif event['type'] == "gameState":
+            self.handle_gameState_event(event)
+            
+            pass
+        elif event['type'] == "chatLine":
+            pass
+        elif event['type'] == "opponentGone":
+            pass
+    def kill_window(self):
         self.chessBoard = None
-        self.boardWin.destroy()
-        self.statsWin.destroy()
-        self.inputWin.destory()
+        self.boardWin.kill_window()
+        if self.statsWin:
+            self.statsWin.kill_window()
+        self.inputWin.kill_window()
 
+    def resize(self):
+        if self.statsWin:
+            self.statsWin.resize()
+        if self.boardWin:
+            self.boardWin.resize()
+        if self.inputWin:
+            self.inputWin.resize()
     def configure_gameclock(self, event):
         assert event["type"] == "gameFull", "wrong event supplied, needs gameFull event"
 
@@ -157,41 +190,21 @@ class GameWinManager:
         if len(state["moves"].split(" ")) > 1:
             self.gameClock.start()
 
-    def process_gameState_event(self, event):
+    def handle_gameState_event(self, event):
         moves = event["moves"]
         status = event["status"]
 
-        if status == "started":
-            self.make_move(moves, event)
-            self.sync_stats(event)
-        elif status == "mate":
-            self.make_move(moves, event)
-            self.sync_stats(event)
+        # Board Window Updating
+        if self.boardWin:
+            if status == "started" or status == "mate" or status == "variantEnd":
+                self.make_move(moves, event)
 
-            self.statsWin.set_winner_displayable_stats(
-                event["winner"], self.win_msg("mate", event["winner"])
-            )
-            self.statsWin.redraw()
-
-        elif status == "resign":
-            self.statsWin.set_winner_displayable_stats(
-                event["winner"], self.win_msg("resign", event["winner"])
-            )
-            self.statsWin.redraw()
-        elif status == "outoftime":
-            self.statsWin.set_times(wtime=event["wtime"], btime=event["btime"])
-            self.statsWin.set_winner_displayable_stats(
-                event["winner"], self.win_msg("outoftime", event["winner"])
-            )
-            self.statsWin.redraw()
-        elif status == "aborted":
-            pass
-        else:
-            print(event)
-            raise Exception("\nIMPLEMENT GAMESTATE STATUS " + status + "\n")
+        # Status Window Updating
+        if self.statsWin:
+            if self.statsWin:
+                self.statsWin.handle_gameState_event(event, self.boardWin.board)
 
     def make_move(self, moves: str, event: dict):
-        # print(len(moves), len(self.boardWin.board.move_stack))
         if len(moves) > len(self.boardWin.board.move_stack):
             # make move
             latest_move = moves.rsplit(" ", 1)[-1]
@@ -205,30 +218,4 @@ class GameWinManager:
             self.boardWin.draw_takeback_once()
 
         else:
-            raise "WHAT THE FUCK"
-
-    def sync_stats(self, event):
-        self.statsWin.set_times(wtime=event["wtime"], btime=event["btime"])
-        self.statsWin.set_ingame_displayable_stats()
-        self.statsWin.set_moves(board=self.boardWin.board)
-        self.statsWin.redraw()
-        if not self.gameClock.started:
-            self.gameClock.start()
-
-        self.gameClock.change_sides()
-
-    def win_msg(
-        self,
-        type: Literal["resign", "mate", "outoftime"],
-        winner: Literal["white", "black"],
-    ):
-        loser = "white"
-        if winner == "white":
-            loser = "black"
-
-        if type == "mate":
-            return f"{winner} won. {loser} got mated"
-        elif type == "resign":
-            return f"{winner} won. {loser} resigned XD"
-        elif type == "outoftime":
-            return f"{winner} won. {loser} timed out"
+            raise "THAT'S IMPOSSIBLE"

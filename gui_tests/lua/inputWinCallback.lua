@@ -2,18 +2,18 @@ function inputWinCallback()
     local input = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
     input = string.gsub(input, " ", "")
 
-    if input == "menu" then
-        append_event("Game", "kill_game_window", {})
-    elseif input == "exit" then
+    if input == "exit" then
         append_event("Global", "exit", {})
+    elseif input == "menu" then
+        append_event("Game", "pass_control", {action="kill_game_window"})
     elseif input == "resign" then
-        append_event("Game", "resign", {})
+        append_event("Game", "internal", {action="resign"})
     elseif input == "abort" then
-        append_event("Game", "abort", {})
+        append_event("Game", "internal", {action="abort"})
     elseif input == "flip" then
-        append_event("Game", "flip", {})
+        append_event("Game", "internal", {action="flip"})
     elseif input ~= "" then 
-        append_event("Game", "make_move", {move=input})
+        append_event("Game", "internal", { action="make_move", move=input})
     end
 
     vim.api.nvim_buf_set_lines(0, 0, -1, false, {})

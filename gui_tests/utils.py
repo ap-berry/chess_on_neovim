@@ -1,7 +1,8 @@
+import json
 from pynvim import Nvim, attach
 from pynvim.api import Buffer, Window
 from typing import Literal, Tuple, Optional, Union, TypedDict, NamedTuple
-
+import os
 
 class ExtmarksOptions(TypedDict, total=False):
     id: int
@@ -47,6 +48,9 @@ def win_del_force(nvim: Nvim, win: Window):
 def win_is_valid(nvim: Nvim, win: Window):
     return nvim.api.win_is_valid(win)
 
+def win_set_local_winhighlight(nvim: Nvim, win: Window, winhighlight: str):
+    """ example usage `win_set_local_winhighlight(nvim, nvim.current.window, "Normal:MyBackground,CursorLine:MyCursorLine")`"""
+    nvim.command(f"call win_execute({win.handle}, 'setlocal winhighlight={winhighlight}')")
 
 def buf_set_extmark(
     nvim: Nvim, buffer: Buffer, ns_id: int, line: int, col: int, opts: ExtmarksOptions
@@ -61,6 +65,10 @@ def buf_set_extmark(
     """
     return nvim.api.buf_set_extmark(buffer, ns_id, line, col, opts)
 
+
+def split_list(lst, n):
+    """Splits the list `lst` into sublists of `n` elements each."""
+    return [lst[i:i + n] for i in range(0, len(lst), n)]
 
 class Highlight(TypedDict):
     hl_group: str
@@ -209,12 +217,12 @@ def config_gen(
     if config == "menu":
         _config.update(
             {
-                "relative": "win",
-                "win": win.handle,
-                "width": 30,
+                "relative": "editor",
+                "width": 34,
                 "height": 20,
                 "focusable": True,
                 "zindex": z_index,
+                "border": "rounded"
             }
         )
 
@@ -227,13 +235,12 @@ def config_gen(
     elif config == "board":
         _config.update(
             {
-                "relative": "win",
-                "win": win.handle,
+                "relative": "editor",
                 "width": 8 * 3 + 2 + 2,  # left pad + right pad
                 "height": 8 + 1 + 1,
                 "focusable": True,
                 "zindex": z_index,
-                "border": "rounded",
+                "border": "rounded"                
             }
         )
 
@@ -246,15 +253,15 @@ def config_gen(
     elif config == "stats":
         _config.update(
             {
-                "relative": "win",
-                "win": win.handle,
+                "relative": "editor",
                 "width": 30,
                 "height": 11,
                 "focusable": True,
                 "external": False,
                 "zindex": z_index,
                 "style": "minimal",
-                "border": "rounded",
+                "border": "rounded"                
+                
             }
         )
 
@@ -291,7 +298,7 @@ def config_gen(
                 "external": False,
                 "zindex": 900,
                 "style": "minimal",
-                "border": "double",
+                "border": "rounded",
             }
         )
 
@@ -304,15 +311,15 @@ def config_gen(
     elif config == "input":
         _config.update(
             {
-                "relative": "win",
-                "win": win.handle,
+                "relative": "editor",
                 "width": 25,
                 "height": 1,
                 "focusable": True,
                 "external": False,
                 "zindex": z_index,
                 "style": "minimal",
-                "border": "rounded",
+                "border": "rounded"           
+                
             }
         )
         _config.update(
@@ -357,6 +364,24 @@ def find_window_from_title(nvim: Nvim, title: str) -> Optional[Window]:
         if wt == title:
             return w
     return None
+
+
+def load_lua_file(nvim: Nvim, lua_file_path: str):
+    with open(lua_file_path, "r") as luafile:
+        lua = luafile.read()
+        nvim.exec_lua(lua) 
+
+def buf_set_keymap(nvim: Nvim, lhs: str, rhs: str, silent: bool = True, insertmodeaswell: bool = False):
+    mapcommand = "noremap <buffer>"
+    mapcommand += lhs
+    mapcommand += " "
+    mapcommand += rhs
+    
+    nvim.api.command(mapcommand)
+
+    if insertmodeaswell:
+        mapcommand = "i" + mapcommand
+        nvim.api.command(mapcommand)
 
 
 def noremap_lua_callback(
@@ -405,14 +430,17 @@ def set_global_var(nvim: Nvim, key: str, value: any):
     nvim.api.set_var(key, value)
 
 
-def add_events(nvim: Nvim, events: Union[list[str], str]):
+def add_app_events(nvim: Nvim, events: Union[list[dict], dict]):
+    app_events: list = get_global_var(nvim, "app_events")
     if isinstance(events, list):
         for e in events:
-            add_events(nvim, e)
+            app_events.append(e)
+        
+        set_global_var(nvim, "app_events", app_events)
     else:
-        nvim.command(f"let g:events ..= '{events}'")
-
-
+        app_events.append(events)
+        set_global_var(nvim, "app_events", app_events)
+        
 def buf_del_force(nvim: Nvim, buffer: Buffer):
     nvim.api.buf_delete(buffer.handle, {"force": True})
 
@@ -421,9 +449,156 @@ def namespace(nvim: Nvim, ns_name: str):
     """creates or finds a namepsace"""
     return nvim.api.create_namespace(ns_name)
 
+def get_theme_dir(config_file_path = ".config"):
+    with open(config_file_path, "r") as file:
+        lines = file.readlines()
+        for line in lines:
+            pairs = line.strip().split("=")
+            if pairs[0] == "THEME_DIR":
+                return pairs[1].removesuffix("\n").replace("\"", "").replace("\'", "")
 
+
+def write_api_key(token: str, config_file_path: str = ".config"):
+        lines = None
+        with open(config_file_path, "r") as file:
+            lines = file.readlines()
+
+            
+        with open(config_file_path, "w") as file:
+            index = 0
+            found = False
+            for line in lines:
+                pairs = line.split("=")
+                if pairs[0].strip() == "API_TOKEN":
+                    found=True
+                    lines[index] = "API_TOKEN=" + token + "\n"
+                    file.writelines(lines)
+            if not found:
+                lines.append(f"API_TOKEN={token}\n")
+                
+                file.writelines(lines)
+                
+def set_theme_dir(theme_dir: str, config_file_path: str = ".config"):
+        lines = None
+        with open(config_file_path, "r") as file:
+            lines = file.readlines()
+
+            
+        with open(config_file_path, "w") as file:
+            index = 0
+            found = False
+            for line in lines:
+                pairs = line.split("=")
+                if pairs[0].strip() == "THEME_DIR":
+                    found=True
+                    lines[index] = "THEME_DIR=\"" + theme_dir + "\"\n"
+                    file.writelines(lines)
+                index+=1
+            if not found:
+                lines.append(f"THEME_DIR=\"{theme_dir}\"\n")
+                file.writelines(lines)
+
+
+def write_api_key(token: str, config_file_path: str = ".config"):
+        lines = None
+        with open(config_file_path, "r") as file:
+            lines = file.readlines()
+
+            
+        with open(config_file_path, "w") as file:
+            index = 0
+            found = False
+            for line in lines:
+                pairs = line.split("=")
+                if pairs[0].strip() == "API_TOKEN":
+                    found=True
+                    lines[index] = "API_TOKEN=\"" + token + "\"\n"
+                    file.writelines(lines)
+                index+=1
+            if not found:
+                lines.append(f"API_TOKEN=\"{token}\"\n")
+                file.writelines(lines)
+
+def get_api_key(config_file_path = ".config"):
+    with open(config_file_path, "r") as file:
+        lines = file.readlines()
+        for line in lines:
+            pairs = line.strip().split("=")
+            if pairs[0] == "API_TOKEN":
+                return pairs[1].removesuffix("\n").replace("\"", "").replace("\'", "")
+
+
+class ThemeFileKeyValuePairError(Exception):
+    def __init__(self, theme_file_path, key, val):
+        self.message = f"Your Theme File : {theme_file_path} Is Corrupted With Wrong Key Value Pair,  '{key}' = '{val}'"
+        super().__init__(self.message)
+
+class ThemeFileNotFound(Exception):
+    def __init__(self, theme_file_path):
+        self.message = f"{theme_file_path} Does Not Exist"
+        super().__init__(self.message)
+
+def set_highlights_from_file(nvim: Nvim, hl_ns: int, theme_dir: str, file_name: Optional[str] = ".theme"):
+    """Use 0 as highlight namespace for setting to global namespace"""
+    theme_file_path = f"./themes/{theme_dir}/{file_name}"
+    # nvim.api.win_set_hl_ns(window, window_namespace)
+    if not os.path.exists(theme_file_path):
+        raise ThemeFileNotFound(theme_file_path)
+    
+    with open(theme_file_path, "r") as file:
+        lines = file.readlines()
+
+        hl_group_name: str = None
+        opts: dict = {}
+
+        for l in lines:
+            if l.lstrip().startswith("#"):
+                continue
+
+            line = l.removesuffix("\n").replace(" ", "")
+
+            if line == "":
+                continue
+
+            if line.startswith("[") or line == "{endfile}":
+                if hl_group_name:
+                    nvim.api.set_hl(
+                        hl_ns, hl_group_name, opts
+                    )
+
+                hl_group_name = line.replace("[", "").replace("]", "")
+                opts = {}
+
+                continue
+
+            key_value = line.split("=")
+            if len(key_value) == 2:
+                key = key_value[0]
+                val = key_value[1]
+                _val = val.lower()
+                if _val == "true":
+                    val = True
+                elif _val == "false":
+                    val = False
+                elif val.isdigit():
+                    val = int(val)
+                opts[key] = val
+            else:
+                raise ThemeFileKeyValuePairError(theme_file_path, key, val)
+
+def find_or_create_config_file():
+    if not os.path.exists(".config"):
+        with open(".config", "a") as configfile:
+            configfile.write("THEME_DIR=\"ayu_dark\"")
+        
 def test():
     nvim = attach("tcp", "127.0.0.1", 6789)
     w = workspace_width(nvim)
     h = workspace_height(nvim)
     print(w, h)
+
+
+class AppEvent(TypedDict):
+    page: Literal["Home", "Game"]
+    event: str
+    opts: dict

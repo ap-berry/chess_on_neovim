@@ -1,9 +1,10 @@
-from pynvim.api import Nvim, Buffer, Window
+from time import sleep
+from pynvim import attach
+from pynvim.api import Nvim
 import utils
 from utils import BadFenError
 from chess import Board, Move
 from typing import Optional, Literal, Union
-
 
 default_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -44,13 +45,14 @@ class BoardWin:
     def __init__(
         self,
         session: Nvim,
-        relative_to_win: Window,
         board: Board = Board(),
         window_config: Optional[dict] = None,
         myside: Literal["black", "white"] = "white",
+        variant: str = "standard",
         theme: Literal["Light", "Dark"] = "Light",
+        app_ns: int = None,
     ):
-        self.session = session
+        self.neovim_session = session
         self.board = board
 
         self.buffer = utils.find_buf(session, "board_buffer") or utils.create_buf(
@@ -63,36 +65,44 @@ class BoardWin:
         self.window = utils.find_window_from_title(
             session, "BoardWindow"
         ) or utils.create_window(
-            self.session,
+            self.neovim_session,
             self.buffer,
-            True,
+            False,
             window_config
-            or utils.config_gen(session, config="board", win=relative_to_win),
+            or utils.config_gen(session, config="board"),
             "BoardWindow",
         )
+        self.neovim_session.api.win_set_option(self.window, "winhighlight", 'Normal:BoardWindowBackground,FloatBorder:BoardWindowFloatBorder')        
 
-        self.namespace = utils.namespace(self.session, "BoardSquaresNs")
-        self.window_namespace = utils.namespace(self.session, "BoardWinNS")
 
+        self.namespace = app_ns or utils.namespace(self.neovim_session, "BoardSquaresNs")
+
+
+        self.variant = variant
         self.flip = myside != "white"
+        if self.variant == "racingKings":
+            self.flip = False
+            
         self.theme = theme
-        self.hl_group_white_sq = "WhiteSquare"
-        self.hl_group_black_sq = "BlackSquare"
-        self.hl_group_move_from = "MovedFrom"
-        self.hl_group_move_to = "MovedTo"
-        self.hl_group_checker = "Checker"
-        self.hl_group_checked = "Checked"
-        self.hl_group_board_border = "Border"
-
-        self._set_window_highlights()
+        self.hl_group_white_sq = "ChessBoardWhiteSquare"
+        self.hl_group_black_sq = "ChessBoardBlackSquare"
+        self.hl_group_move_from = "ChessBoardMovedFrom"
+        self.hl_group_move_to = "ChessBoardMovedTo"
+        self.hl_group_checked = "ChessBoardChecked"
+        self.hl_group_board_border = "ChessBoardBorder"
+        self.hl_group_special_white_sq = "ChessBoardSpecialWhiteSquare"
+        self.hl_group_special_black_sq = "ChessBoardSpecialBlackSquare"
+        self.hl_group_special_move_from = "ChessBoardSpecialMovedFrom"
+        self.hl_group_special_move_to = "ChessBoardSpecialMovedTo"
+            
         self.redraw("")
 
-        self.autocmd_group = self.session.api.create_augroup(
+        self.autocmd_group = self.neovim_session.api.create_augroup(
             "BoardWinAuGroup", {"clear": True}
         )
 
         utils.buf_add_hl(
-            self.session,
+            self.neovim_session,
             self.buffer,
             self.namespace,
             [self.hl_group_board_border, 0, 0, -1],
@@ -102,101 +112,8 @@ class BoardWin:
         self.flip = not self.flip
         self.redraw(self.board.peek() if len(self.board.move_stack) != 0 else "")
 
-    def _set_window_highlights(self):
-        self.session.api.win_set_hl_ns(self.window, self.window_namespace)
-        self.session.api.set_hl(
-            self.window_namespace,
-            "NormalFloat",
-            {"ctermbg": "None", "ctermfg": "White"},
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "WhiteSquare",
-            {
-                "bg": "White",
-                "fg": "Black",
-                "ctermbg": "White",
-                "ctermfg": "Black",
-                "bold": True,
-                "blend": 0,
-                "standout": False,
-            },
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "BlackSquare",
-            {
-                "bg": "LightGreen",
-                "fg": "Black",
-                "ctermbg": "DarkBlue",
-                "ctermfg": "Black",
-                "bold": True,
-                "blend": 0,
-                "standout": False,
-            },
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "MovedTo",
-            {
-                "bg": "LightBlue",
-                "fg": "Black",
-                "ctermbg": "LightGreen",
-                "ctermfg": "Black",
-                "bold": True,
-                "blend": 0,
-            },
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "MovedFrom",
-            {
-                "bg": "Blue",
-                "fg": "Black",
-                "ctermbg": "Green",
-                "ctermfg": "Black",
-                "bold": True,
-                "blend": 0,
-            },
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "Checker",
-            {
-                "bg": "LightRed",
-                "fg": "Black",
-                "ctermbg": "LightRed",
-                "ctermfg": "Black",
-                "bold": True,
-                "blend": 0,
-            },
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "Checked",
-            {
-                "bg": "LightRed",
-                "fg": "Black",
-                "ctermbg": "Red",
-                "ctermfg": "Black",
-                "bold": True,
-                "blend": 0,
-            },
-        )
-        self.session.api.set_hl(
-            self.window_namespace,
-            "Border",
-            {
-                "fg": "White",
-                "ctermbg": "Black",
-                "ctermfg": "White",
-                "bold": True,
-                "blend": 0,
-            },
-        )
-
     def set_autocmd(self, handle: int):
-        self.session.api.create_autocmd(
+        self.neovim_session.api.create_autocmd(
             "BufEnter",
             {
                 "group": self.autocmd_group,
@@ -207,17 +124,11 @@ class BoardWin:
 
     def toggle_theme(self):
         # TODO
-        pass
-
-    def redraw_from_fen(self, fen: str, lastMove: str):
-        self.board.set_fen(fen)
-        self.redraw(lastMove)
-
-        pass
+        pass        
 
     def redraw(self, lastMove: Union[str, Move]):
-        utils.buf_set_extmark(self.session, *self._create_board_extmark(lastMove))
-        utils.force_redraw(nvim=self.session)
+        utils.buf_set_extmark(self.neovim_session, *self._create_board_extmark(lastMove))
+        utils.force_redraw(nvim=self.neovim_session)
 
     def is_legal_move(self, move: Move):
         if move in self.board.legal_moves:
@@ -226,12 +137,21 @@ class BoardWin:
             return False
 
     def _set_current(self):
-        self.session.current.buffer = self.buffer
+        self.neovim_session.current.buffer = self.buffer
 
-    def destroy(self):
-        self.session.api.win_close(self.window, True)
-        self.session.api.buf_delete(self.buffer, {"force": True})
+    def kill_window(self):
+        self.neovim_session.api.win_close(self.window, True)
+        self.neovim_session.api.buf_delete(self.buffer, {"force": True})
 
+    def resize(self):
+        self.neovim_session.api.win_set_config(
+            self.window,
+            {
+                "relative": "editor",
+                "row": (utils.workspace_height(self.neovim_session) - 10) // 2,
+                "col": (utils.workspace_width(self.neovim_session) - 28 + 32) // 2, 
+            }
+        )
     @staticmethod
     def _flip_board_fen(fen: list[str]):
         _f = [l[::-1] for l in fen]
@@ -283,6 +203,18 @@ class BoardWin:
 
             virt_lines.append(virt_line)
 
+        if self.variant != "standard":
+            # +1 to account for the border
+            if self.variant == "racingKings":
+                for i in range(8):
+                    virt_lines[0][i+1][1] = self.hl_group_special_white_sq if i % 2 == 0 else self.hl_group_special_black_sq
+            elif self.variant == "kingOfTheHill":
+                virt_lines[3][3+1][1] = self.hl_group_special_white_sq 
+                virt_lines[3][4+1][1] = self.hl_group_special_black_sq
+                virt_lines[4][3+1][1] = self.hl_group_special_black_sq
+                virt_lines[4][4+1][1] = self.hl_group_special_white_sq
+    
+
         if lastMove and lastMove != "":
             if isinstance(lastMove, str):
                 lastMove = Move.from_uci(lastMove)
@@ -296,12 +228,24 @@ class BoardWin:
             to_sq_row = 7 - to_sq // 8
             to_sq_col = (to_sq % 8) + 1
 
-            virt_lines[from_sq_row][from_sq_col][1] = self.hl_group_move_from
-            virt_lines[to_sq_row][to_sq_col][1] = self.hl_group_move_to
+            if self.variant == "kingOfTheHill":
+                if from_sq_row == 0:
+                    virt_lines[from_sq_row][from_sq_col][1] = self.hl_group_special_move_from
+                if to_sq_row == 0:
+                    virt_lines[to_sq_row][to_sq_col][1] = self.hl_group_special_move_to
+            elif self.variant == "racingKings":
+                if from_sq_row == 3 or from_sq_row == 4:
+                    if from_sq_col == 4 or from_sq_col == 5:
+                        virt_lines[from_sq_row][from_sq_col][1] = self.hl_group_special_move_from                    
+                elif to_sq_row == 3 or to_sq_row == 4:
+                    if to_sq_col == 4 or to_sq_col == 5:
+                        virt_lines[to_sq_row][to_sq_col][1] = self.hl_group_special_move_to
+            else:
+                virt_lines[from_sq_row][from_sq_col][1] = self.hl_group_move_from
+                virt_lines[to_sq_row][to_sq_col][1] = self.hl_group_move_to
 
         if self.board.is_check():
             king_in_check_sq = self._find_king_square(self.board.turn)
-            print(king_in_check_sq, "\n\n\n")
             assert king_in_check_sq, "King In Check Not Found"
 
             checked_row = king_in_check_sq[0]
@@ -309,6 +253,9 @@ class BoardWin:
 
             virt_lines[checked_row][checked_col][1] = self.hl_group_checked
 
+                
+        
+        
         if self.flip:
             virt_lines = [virt_line[::-1] for virt_line in virt_lines[::-1]]
             border_line.reverse()
@@ -355,12 +302,24 @@ class BoardWin:
             row += 1
         return None
 
-    def _set_buffer_local_keymap(self):
-        utils.noremap_lua_callback(
-            self.session,
-            "./gui_tests/lua/BoardWinClickCallback.lua",
-            "<leftmouse>",
-            "<cmd>lua BoardWinLeftClickCallback()<CR>",
-            current_buffer_specific=True,
-            insertmodeaswell=True,
-        )
+def test():
+    nvim = attach("tcp", "127.0.0.1", 6789)
+
+    b = BoardWin(
+        nvim,
+        nvim.current.window,
+        theme_file_path="themes/ayu_dark/.board"
+    )
+
+    b.draw_push_move(Move.from_uci("e2e4"))
+    b.draw_push_move(Move.from_uci("e7e5"))
+    b.draw_push_move(Move.from_uci("d1f3"))
+    b.draw_push_move(Move.from_uci("d7d5"))
+    b.draw_push_move(Move.from_uci("f3f7"))
+
+    while True:
+        try:
+            b._set_highlights_from_file()
+            sleep(1)
+        except:
+            pass
