@@ -44,7 +44,7 @@ clone the repo:
 `git clone https://github.com/ap-berry/chess_on_neovim && cd chess_on_neovim`
 
 run this command with your API TOKEN
-`echo <API TOKEN> > gui_tests/.env`
+`echo <API TOKEN> > .config`
 replace `<API TOKEN>` with your token
 
 
