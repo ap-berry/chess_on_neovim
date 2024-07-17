@@ -204,7 +204,7 @@ class StatsWin:
             virt_lines.append(line)
             
         virt_lines.append(
-            [spacer, ["Mystatus is shit", ""]]
+            [spacer, ["", ""]]
         )
         
         
